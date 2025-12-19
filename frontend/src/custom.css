@@ -1,0 +1,509 @@
+/* custom.css - Premium Enhanced Version */
+
+@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap');
+
+body {
+  font-family: 'Poppins', sans-serif;
+  background-color: #f5f7fa;
+  color: #212529;
+  margin: 0;
+  padding: 0;
+}
+
+/* Smooth Scroll & Transitions */
+html {
+  scroll-behavior: smooth;
+}
+* {
+  transition: all 0.3s ease;
+}
+
+/* Premium Cards */
+.card {
+  border-radius: 20px;
+  overflow: hidden;
+  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.08);
+  background: #ffffff;
+}
+.card:hover {
+  transform: translateY(-15px);
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.15);
+}
+.card img {
+  height: 220px;
+  object-fit: cover;
+  transition: transform 0.5s ease;
+}
+.card:hover img {
+  transform: scale(1.05);
+}
+
+/* Buttons - Gradient & Premium */
+.btn-primary {
+  background: linear-gradient(135deg, #00796b, #004d40);
+  border: none;
+  border-radius: 50px;
+  padding: 12px 30px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+.btn-primary:hover {
+  background: linear-gradient(135deg, #004d40, #002e26);
+  transform: translateY(-3px);
+  box-shadow: 0 10px 20px rgba(0, 121, 107, 0.3);
+}
+
+.btn-success {
+  background: #4caf50;
+  border-radius: 50px;
+}
+
+/* Navbar - Premium Sticky */
+.navbar {
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(10px);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+}
+.navbar-brand img {
+  height: 50px;
+  transition: transform 0.3s;
+}
+.navbar-brand:hover img {
+  transform: rotate(5deg) scale(1.1);
+}
+.nav-link {
+  font-weight: 500;
+  color: #212529 !important;
+  margin: 0 10px;
+}
+.nav-link:hover {
+  color: #00796b !important;
+}
+
+/* Hero Section - Full Premium */
+.hero {
+  position: relative;
+  background: linear-gradient(rgba(0,0,0,0.5), rgba(0,0,0,0.5)), url('https://images.unsplash.com/photo-1522708323590-d24dbb6b0267?ixlib=rb-4.0.3&auto=format&fit=crop&w=1950&q=80') center/cover no-repeat;
+  height: 85vh;
+  min-height: 600px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  color: white;
+}
+.hero h1 {
+  font-size: 3.5rem;
+  font-weight: 700;
+  text-shadow: 0 4px 10px rgba(0,0,0,0.6);
+}
+.hero .input-group {
+  max-width: 800px;
+  margin: 30px auto;
+}
+.hero .form-control, .hero .form-select {
+  border-radius: 50px 0 0 50px;
+  height: 55px;
+  border: none;
+}
+.hero .btn {
+  border-radius: 0 50px 50px 0;
+}
+
+/* Sections */
+section {
+  padding: 80px 0;
+}
+h2 {
+  font-weight: 600;
+  color: #00796b;
+  position: relative;
+  display: inline-block;
+}
+h2::after {
+  content: '';
+  position: absolute;
+  bottom: -10px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 60px;
+  height: 4px;
+  background: #4caf50;
+  border-radius: 2px;
+}
+
+/* Why Choose Us Icons */
+.icon-box {
+  background: white;
+  padding: 30px;
+  border-radius: 20px;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.05);
+}
+.icon-box i {
+  font-size: 3rem;
+  color: #00796b;
+  margin-bottom: 20px;
+}
+
+/* Footer - Dark Premium */
+.footer {
+  background: #1e293b;
+  color: #e2e8f0;
+  padding: 60px 0 30px;
+}
+.footer h5 {
+  color: white;
+  font-weight: 600;
+}
+.footer a {
+  color: #94a3b8;
+  text-decoration: none;
+}
+.footer a:hover {
+  color: #4caf50;
+}
+.footer .bi {
+  font-size: 1.5rem;
+  margin: 0 10px;
+  color: #94a3b8;
+}
+.footer .bi:hover {
+  color: #4caf50;
+  transform: scale(1.2);
+}
+
+/* Skeleton Loader */
+.skeleton {
+  background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+  background-size: 200% 100%;
+  animation: loading 1.5s infinite;
+}
+@keyframes loading {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+/* Mobile Optimizations */
+@media (max-width: 768px) {
+  .hero h1 { font-size: 2.5rem; }
+  .hero { height: 70vh; }
+  .card { margin-bottom: 30px; }
+  .sidebar { width: 280px; }
+}
+/* Enhanced Navbar Styling */
+.navbar {
+  backdrop-filter: blur(10px);
+  background: rgba(255, 255, 255, 0.95) !important;
+  transition: all 0.3s ease;
+}
+
+.navbar.scrolled {
+  background: rgba(255, 255, 255, 0.98) !important;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+}
+
+/* Active link highlight */
+.nav-link.active,
+.nav-link:hover {
+  color: #00796b !important;
+}
+
+/* Mobile menu smooth */
+.navbar-collapse {
+  transition: all 0.3s ease;
+}
+
+@media (max-width: 991px) {
+  .navbar-collapse {
+    background: white;
+    margin-top: 15px;
+    border-radius: 15px;
+    padding: 20px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+  }
+  
+  .nav-link {
+    padding: 12px 0 !important;
+    border-bottom: 1px solid #f0f0f0;
+  }
+  
+  .nav-link:last-child {
+    border-bottom: none;
+  }
+}/* Auth Pages - Ultra Stylish */
+.login-section {
+  background: linear-gradient(135deg, #00796b 0%, #004d40 100%);
+  position: relative;
+  overflow: hidden;
+}
+
+.login-section::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: url('https://images.unsplash.com/photo-1522708323590-d24dbb6b0267?ixlib=rb-4.0.3&auto=format&fit=crop&w=1950&q=80') center/cover;
+  opacity: 0.2;
+  z-index: 1;
+}
+
+.glass-card {
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(15px);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  z-index: 2;
+  position: relative;
+}
+
+.stylish-input {
+  border: none;
+  border-bottom: 2px solid #00796b;
+  border-radius: 0;
+  background: transparent;
+  padding-left: 40px !important;
+}
+
+.stylish-input:focus {
+  box-shadow: none;
+  border-bottom: 2px solid #4caf50;
+  background: rgba(0, 121, 107, 0.05);
+}
+
+.form-floating > label {
+  color: #00796b;
+  font-weight: 500;
+}
+
+.form-check-input:checked {
+  background-color: #00796b;
+  border-color: #00796b;
+}
+
+@media (max-width: 576px) {
+  .glass-card {
+    margin: 20px;
+    padding: 30px !important;
+  }
+}/* Navbar - Uniform & Premium Styling */
+.nav-item-custom {
+  font-weight: 500;
+  color: #212529 !important;
+  padding: 8px 16px !important;
+  border-radius: 50px;
+  transition: all 0.3s ease;
+  position: relative;
+}
+
+.nav-item-custom:hover,
+.nav-item-custom.active {
+  color: #00796b !important;
+  background-color: rgba(0, 121, 107, 0.1);
+  transform: translateY(-2px);
+}
+
+/* Outline Button (Login) */
+.nav-btn-outline {
+  font-weight: 600;
+  color: #00796b !important;
+  border: 2px solid #00796b;
+  padding: 10px 28px !important;
+  border-radius: 50px;
+  transition: all 0.3s ease;
+}
+
+.nav-btn-outline:hover {
+  background-color: #00796b;
+  color: white !important;
+  transform: translateY(-3px);
+  box-shadow: 0 8px 20px rgba(0, 121, 107, 0.25);
+}
+
+/* Primary Button (Register) */
+.nav-btn-primary {
+  font-weight: 600;
+  background: linear-gradient(135deg, #00796b, #004d40);
+  color: white !important;
+  padding: 12px 32px !important;
+  border-radius: 50px;
+  border: none;
+  transition: all 0.3s ease;
+}
+
+.nav-btn-primary:hover {
+  background: linear-gradient(135deg, #004d40, #002e26);
+  transform: translateY(-3px);
+  box-shadow: 0 10px 25px rgba(0, 121, 107, 0.3);
+}
+
+/* Mobile Menu Styling */
+@media (max-width: 991px) {
+  .navbar-collapse {
+    background: white;
+    margin-top: 15px;
+    padding: 20px;
+    border-radius: 20px;
+    box-shadow: 0 15px 40px rgba(0, 0, 0, 0.1);
+  }
+
+  .nav-item-custom,
+  .nav-btn-outline,
+  .nav-btn-primary {
+    text-align: center;
+    margin: 10px 0 !important;
+  }
+
+  .nav-btn-primary,
+  .nav-btn-outline {
+    display: block;
+    width: 100%;
+  }
+}
+/* Owner Dashboard - Premium Styling */
+.owner-dashboard {
+  background: linear-gradient(135deg, #f5f7fa 0%, #e4f0f5 100%);
+}
+
+.dashboard-sidebar {
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(15px);
+  border: 1px solid rgba(0, 121, 107, 0.2);
+  height: fit-content;
+}
+
+.active-tab {
+  background: linear-gradient(135deg, #00796b, #004d40) !important;
+  color: white !important;
+  box-shadow: 0 8px 25px rgba(0, 121, 107, 0.3);
+}
+
+.nav-link:hover {
+  color: #00796b !important;
+  background: rgba(0, 121, 107, 0.1) !important;
+  border-radius: 50px;
+}
+
+.content-card {
+  background: rgba(255, 255, 255, 0.97);
+  backdrop-filter: blur(15px);
+  border: 1px solid rgba(0, 121, 107, 0.15);
+}
+
+.modern-table {
+  background: white;
+  border-radius: 15px;
+  overflow: hidden;
+  box-shadow: 0 8px 25px rgba(0,0,0,0.08);
+}
+
+.modern-table th {
+  background: #00796b;
+  color: white;
+  font-weight: 600;
+}
+
+.review-card {
+  background: #f8f9fa;
+  border-left: 5px solid #00796b;
+  transition: all 0.3s ease;
+}
+
+.review-card:hover {
+  transform: translateY(-5px);
+  box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+}
+
+.transition-all {
+  transition: all 0.3s ease;
+}
+
+/* Reuse stylish-input from login page */
+/* Global fix for fixed navbar overlap */
+body {
+  padding-top: 80px;  /* Adjust based on your navbar height (usually 70-90px) */
+}
+
+/* Or for more control */
+.fixed-top + * {
+  padding-top: 80px;
+}
+/* Role Toggle - Premium Animated Switch */
+.role-toggle {
+  border: 2px solid #e0e0e0;
+  overflow: hidden;
+}
+
+.role-toggle button {
+  background: transparent;
+  border: none;
+  outline: none;
+  cursor: pointer;
+  transition: all 0.4s ease;
+  min-width: 140px;
+}
+
+.active-role {
+  background: linear-gradient(135deg, #00796b, #004d40) !important;
+  color: white !important;
+  box-shadow: 0 4px 15px rgba(0, 121, 107, 0.3);
+}
+
+.role-toggle button:hover:not(.active-role) {
+  background: rgba(0, 121, 107, 0.1);
+  color: #00796b;
+}
+
+.transition-all {
+  transition: all 0.3s ease;
+}/* Owner Dashboard - Final Premium Styles */
+.dashboard-sidebar { background: white; backdrop-filter: blur(10px); }
+.active-tab { background: linear-gradient(135deg, #00796b, #004d40) !important; }
+.hover-bg:hover { background: rgba(0, 121, 107, 0.1); color: #00796b !important; }
+.content-card { background: white; min-height: 80vh; }
+.room-type-card { background: #f8fffe; }
+.modern-table th { background: #00796b; color: white; }
+.review-card:hover { transform: translateY(-5px); box-shadow: 0 15px 30px rgba(0,0,0,0.1); }
+.sticky-top { top: 20px; }
+/* Total Seats Summary Card */
+.bg-teal { background: #00796b !important; }
+
+/* Live update highlight */
+.room-type-card input:focus {
+  border-color: #00796b !important;
+  box-shadow: 0 0 0 0.25rem rgba(0, 121, 107, 0.25) !important;
+}
+/* Hostel Details Page - Premium */
+.hostel-details .hover-lift {
+  transition: all 0.3s ease;
+}
+.hostel-details .hover-lift:hover {
+  transform: translateY(-10px);
+  box-shadow: 0 20px 40px rgba(0,0,0,0.15) !important;
+}
+
+.carousel-control-prev, .carousel-control-next {
+  width: 50px;
+  background: rgba(0,0,0,0.5);
+}
+
+.sticky-top {
+  top: 100px;
+}
+/* Profile Page - Premium */
+.profile-page .hover-lift {
+  transition: all 0.3s ease;
+}
+.profile-page .hover-lift:hover {
+  transform: translateY(-8px);
+  box-shadow: 0 15px 30px rgba(0,0,0,0.1);
+}
+/* Profile Enhancements */
+.hover-lift {
+  transition: all 0.3s ease;
+}
+.hover-lift:hover {
+  transform: translateY(-8px);
+  box-shadow: 0 20px 40px rgba(0,0,0,0.15);
+}
+.profile-page .card {
+  transition: all 0.3s ease;
+}
