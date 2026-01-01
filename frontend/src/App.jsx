@@ -22,21 +22,25 @@ function App() {
 
   // Check login status on app load
   useEffect(() => {
-    const role = localStorage.getItem('userRole');
-    if (role) {
+    const token = localStorage.getItem('token');
+    const user = localStorage.getItem('user');
+
+    if (token && user) {
+      const parsedUser = JSON.parse(user);
       setIsLoggedIn(true);
-      setUserRole(role);
+      setUserRole(parsedUser.role);
     }
   }, []);
 
   const handleLogin = (role) => {
-    localStorage.setItem('userRole', role);
     setIsLoggedIn(true);
     setUserRole(role);
     triggerToast(`Welcome back! Logged in as ${role === 'owner' ? 'Hostel Owner' : 'Student'}`);
   };
 
   const handleLogout = () => {
+    localStorage.removeItem('token');
+    localStorage.removeItem('user');
     localStorage.removeItem('userRole');
     setIsLoggedIn(false);
     setUserRole(null);
@@ -54,43 +58,51 @@ function App() {
       <Navbar isLoggedIn={isLoggedIn} userRole={userRole} handleLogout={handleLogout} />
 
       <Routes>
+        {/* Public Routes */}
         <Route path="/" element={<Home />} />
         <Route path="/hostels" element={<Hostels />} />
-        
-        {/* HostelDetails - Pass isLoggedIn and triggerToast */}
         <Route 
           path="/hostel/:id" 
           element={<HostelDetails triggerToast={triggerToast} isLoggedIn={isLoggedIn} />} 
         />
-
         <Route path="/about" element={<About />} />
         <Route path="/contact" element={<Contact />} />
 
-        {/* Login & Register - Redirect if already logged in */}
+        {/* Auth Routes - Redirect if already logged in */}
         <Route 
           path="/login" 
-          element={isLoggedIn ? <Navigate to="/" /> : <Login handleLogin={handleLogin} />} 
+          element={isLoggedIn ? <Navigate to="/" replace /> : <Login handleLogin={handleLogin} />} 
         />
         <Route 
           path="/register" 
-          element={isLoggedIn ? <Navigate to="/" /> : <Register handleLogin={handleLogin} />} 
+          element={isLoggedIn ? <Navigate to="/" replace /> : <Register handleLogin={handleLogin} />} 
         />
 
-        {/* Owner Dashboard - Only for owners */}
-        <Route 
-          path="/owner-dashboard" 
-          element={userRole === 'owner' ? <OwnerDashboard triggerToast={triggerToast} /> : <Navigate to="/login" />} 
-        />
-
-        {/* Profile - Only for logged-in users, with props */}
+        {/* Protected Routes */}
         <Route 
           path="/profile" 
           element={
             isLoggedIn 
-              ? <Profile userRole={userRole} isLoggedIn={isLoggedIn} triggerToast={triggerToast} />
-              : <Navigate to="/login" />
+              ? <Profile 
+                  userRole={userRole} 
+                  isLoggedIn={isLoggedIn} 
+                  triggerToast={triggerToast} 
+                />
+              : <Navigate to="/login" replace />
           } 
         />
+
+        <Route 
+          path="/owner-dashboard" 
+          element={
+            isLoggedIn && userRole === 'owner' 
+              ? <OwnerDashboard triggerToast={triggerToast} />
+              : <Navigate to="/login" replace />
+          } 
+        />
+
+        {/* Catch-all redirect */}
+        <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
 
       <Footer />

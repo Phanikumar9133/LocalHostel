@@ -1,16 +1,52 @@
 // src/pages/Register.jsx
 import { useState } from 'react';
-import { Link } from 'react-router-dom';
-import { Container, Row, Col, Form, Button } from 'react-bootstrap';
+import { Link, useNavigate } from 'react-router-dom';
+import api from '../services/api';
+import { toast } from 'react-toastify';
+import { Container, Row, Col, Form, Button, Spinner } from 'react-bootstrap';
 
 function Register({ handleLogin }) {
+  const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [role, setRole] = useState('user');
+  const [phone, setPhone] = useState('');
+  const [loading, setLoading] = useState(false);
+  const navigate = useNavigate();
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    handleLogin(role);
+    setLoading(true);
+
+    try {
+      const response = await api.post('/auth/register', {
+        name,
+        email,
+        password,
+        role,
+        phone,
+      });
+
+      const { success, token, user } = response.data;
+
+      if (success) {
+        // Store token and user data
+        localStorage.setItem('token', token);
+        localStorage.setItem('user', JSON.stringify(user));
+        localStorage.setItem('userRole', user.role);
+
+        // Update parent state
+        handleLogin(user.role);
+
+        toast.success('Registration successful! Welcome to HostelHub!');
+        navigate('/');
+      }
+    } catch (err) {
+      const errorMsg = err.response?.data?.message || 'Registration failed. Please try again.';
+      toast.error(errorMsg);
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -19,28 +55,43 @@ function Register({ handleLogin }) {
         <Row className="justify-content-center">
           <Col lg={5} md={7}>
             <div className="glass-card p-5 rounded-4 shadow-lg">
-              {/* Header */}
+              {/* Logo & Title */}
               <div className="text-center mb-5">
-                <img src="/src/assets/hotel.png" alt="HostelHub" height="60" className="mb-4" />
+                <img
+                  src="/src/assets/hotel.png"
+                  alt="HostelHub"
+                  height="60"
+                  className="mb-4"
+                />
                 <h2 className="fw-bold text-success">Create Account</h2>
                 <p className="text-muted">Join thousands of students finding their perfect stay</p>
               </div>
 
               <Form onSubmit={handleSubmit}>
+                {/* Name */}
+                <div className="form-floating mb-4">
+                  <input
+                    type="text"
+                    className="form-control stylish-input"
+                    placeholder="Name"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    required
+                  />
+                  <label>Name</label>
+                </div>
+
                 {/* Email */}
                 <div className="form-floating mb-4">
                   <input
                     type="email"
                     className="form-control stylish-input"
-                    id="reg-email"
-                    placeholder="name@example.com"
+                    placeholder="Email"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     required
                   />
-                  <label htmlFor="reg-email">
-                    <i className="bi bi-envelope me-2"></i> Email Address
-                  </label>
+                  <label>Email Address</label>
                 </div>
 
                 {/* Password */}
@@ -48,18 +99,27 @@ function Register({ handleLogin }) {
                   <input
                     type="password"
                     className="form-control stylish-input"
-                    id="reg-password"
                     placeholder="Password"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     required
                   />
-                  <label htmlFor="reg-password">
-                    <i className="bi bi-lock me-2"></i> Create Password
-                  </label>
+                  <label>Password</label>
                 </div>
 
-                {/* Role Selection - Stylish Toggle */}
+                {/* Phone */}
+                <div className="form-floating mb-4">
+                  <input
+                    type="tel"
+                    className="form-control stylish-input"
+                    placeholder="Phone"
+                    value={phone}
+                    onChange={(e) => setPhone(e.target.value)}
+                  />
+                  <label>Phone (optional)</label>
+                </div>
+
+                {/* Role Selection */}
                 <div className="mb-4">
                   <label className="form-label fw-bold text-dark">I am registering as:</label>
                   <div className="d-flex gap-4 justify-content-center">
@@ -92,25 +152,43 @@ function Register({ handleLogin }) {
                   </div>
                 </div>
 
-                {/* Submit */}
+                {/* Submit Button */}
                 <Button
                   type="submit"
                   className="btn-success w-100 py-3 rounded-pill fw-bold mb-4 shadow"
                   size="lg"
+                  disabled={loading}
                 >
-                  <i className="bi bi-person-plus me-2"></i> Create Account
+                  {loading ? (
+                    <>
+                      <Spinner
+                        as="span"
+                        animation="border"
+                        size="sm"
+                        role="status"
+                        aria-hidden="true"
+                        className="me-2"
+                      />
+                      Creating account...
+                    </>
+                  ) : (
+                    <>
+                      <i className="bi bi-person-plus me-2"></i> Create Account
+                    </>
+                  )}
                 </Button>
 
                 {/* Divider */}
                 <div className="text-center my-4 text-muted">OR</div>
 
-                {/* Social */}
+                {/* Social Signup (placeholders) */}
                 <div className="d-grid gap-3">
-                  <Button variant="outline-danger" className="rounded-pill py-3">
+                  <Button variant="outline-danger" className="rounded-pill py-3" disabled>
                     <i className="bi bi-google me-2"></i> Sign up with Google
                   </Button>
                 </div>
 
+                {/* Login Link */}
                 <p className="text-center mt-4 text-muted">
                   Already have an account?{' '}
                   <Link to="/login" className="text-success fw-bold text-decoration-none">

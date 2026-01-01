@@ -1,177 +1,239 @@
 // src/pages/OwnerDashboard.jsx
-import { useState } from 'react';
-import { Container, Row, Col, Button, Form, Table, Badge, Card, InputGroup } from 'react-bootstrap';
+import { useState, useEffect } from 'react';
+import { Container, Row, Col, Button, Form, Table, Badge, Card, Modal, Spinner, Dropdown } from 'react-bootstrap';
+import api from '../services/api';
+import { toast } from 'react-toastify';
 
 function OwnerDashboard({ triggerToast }) {
-  const [activeTab, setActiveTab] = useState('manage');
-  const [hostelName, setHostelName] = useState('');
-  const [selectedImages, setSelectedImages] = useState([]);
+  const [activeTab, setActiveTab] = useState('add');
+  const [loading, setLoading] = useState(true);
+  const [publishLoading, setPublishLoading] = useState(false);
+  const [hostels, setHostels] = useState([]);
+  const [selectedHostel, setSelectedHostel] = useState(null);
+  const [rooms, setRooms] = useState([]);
+  const [bookings, setBookings] = useState([]);
+  const [reviews, setReviews] = useState([]);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editHostel, setEditHostel] = useState(null);
+
+  const [newHostel, setNewHostel] = useState({
+    name: '',
+    location: '',
+    type: 'Boys Hostel',
+    price: '',
+    facilities: [],
+    images: [],
+  });
   const [roomTypes, setRoomTypes] = useState({
-    1: { rooms: 5, price: 12000 },
-    2: { rooms: 10, price: 8000 },
-    3: { rooms: 15, price: 6000 },
-    5: { rooms: 8, price: 5000 },
+    single: { count: '', price: '' },
+    double: { count: '', price: '' },
+    triple: { count: '', price: '' },
+    five: { count: '', price: '' },
   });
 
-  // Mock rooms state (dynamic)
-  const [rooms, setRooms] = useState(() => {
-    const initialRooms = [];
-    let roomNumber = 101;
-    Object.keys(roomTypes).forEach(sharing => {
-      const numRooms = parseInt(roomTypes[sharing].rooms) || 0;
-      const seatsPerRoom = parseInt(sharing);
-      for (let i = 1; i <= numRooms; i++) {
-        initialRooms.push({
-          id: initialRooms.length + 1,
-          roomNumber: `Room ${roomNumber++}`,
-          type: sharing === '1' ? 'Single' : `${sharing}-Sharing`,
-          totalSeats: seatsPerRoom,
-          occupied: Math.floor(Math.random() * seatsPerRoom),
-          available: 0, // Will be calculated
-          status: 'Partial',
-        });
+  const facilitiesOptions = [
+    'Free WiFi', 'Food', 'Laundry', 'Power Backup',
+    '24/7 Security', 'AC Rooms', 'CCTV', 'Housekeeping',
+    'Parking', 'Study Room', 'Washing Machine'
+  ];
+
+  // Fetch owner data
+  useEffect(() => {
+    const fetchOwnerData = async () => {
+      try {
+        setLoading(true);
+        const user = JSON.parse(localStorage.getItem('user'));
+        if (!user || user.role !== 'owner') {
+          toast.error('Owner access required');
+          return;
+        }
+
+        const hostelsRes = await api.get('/hostels');
+        const ownerHostels = hostelsRes.data.filter(h => h.owner === user._id);
+        setHostels(ownerHostels);
+
+        if (ownerHostels.length > 0) {
+          const first = ownerHostels[0];
+          setSelectedHostel(first);
+          setRooms(first.rooms || []);
+          const bookingsRes = await api.get('/bookings/owner');
+          setBookings(bookingsRes.data);
+          const reviewsRes = await api.get(`/reviews/${first._id}`);
+          setReviews(reviewsRes.data);
+        }
+      } catch (err) {
+        toast.error('Failed to load dashboard');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchOwnerData();
+  }, []);
+
+  const totalSeats = rooms.reduce((sum, r) => sum + (r.totalSeats || 0), 0);
+  const totalOccupied = rooms.reduce((sum, r) => sum + (r.occupied || 0), 0);
+  const totalAvailable = totalSeats - totalOccupied;
+  const pendingBookings = bookings.filter(b => b.status === 'Pending').length;
+
+  const toggleFacility = (facility, isEdit = false) => {
+    const setter = isEdit ? setEditHostel : setNewHostel;
+    setter(prev => ({
+      ...prev,
+      facilities: prev.facilities.includes(facility)
+        ? prev.facilities.filter(f => f !== facility)
+        : [...prev.facilities, facility],
+    }));
+  };
+
+  // Publish new hostel
+  const handlePublishHostel = async (e) => {
+    e.preventDefault();
+    setPublishLoading(true);
+
+    const roomsArray = [];
+    Object.entries(roomTypes).forEach(([key, { count, price }]) => {
+      const num = parseInt(count) || 0;
+      const p = parseInt(price) || 0;
+      if (num > 0 && p > 0) {
+        const typeMap = { single: 'Single', double: '2-Sharing', triple: '3-Sharing', five: '5-Sharing' };
+        const seats = key === 'single' ? 1 : parseInt(typeMap[key].charAt(0));
+        for (let i = 1; i <= num; i++) {
+          roomsArray.push({
+            type: typeMap[key],
+            roomNumber: `${typeMap[key]} ${i}`,
+            totalSeats: seats,
+            price: p,
+            occupied: 0,
+          });
+        }
       }
     });
-    // Calculate available seats
-    return initialRooms.map(room => ({
-      ...room,
-      available: room.totalSeats - room.occupied,
-      status: room.totalSeats - room.occupied === 0 ? 'Full' :
-              room.totalSeats - room.occupied === room.totalSeats ? 'Vacant' : 'Partial'
-    }));
-  });
 
-  // Filter and search states
-  const [filterType, setFilterType] = useState('All');
-  const [searchQuery, setSearchQuery] = useState('');
-
-  // Add new room state
-  const [newRoom, setNewRoom] = useState({
-    roomNumber: '',
-    type: 'Single',
-    totalSeats: 1,
-    occupied: 0,
-  });
-
-  // Totals
-  const totalSeats = rooms.reduce((sum, room) => sum + room.totalSeats, 0);
-  const totalOccupied = rooms.reduce((sum, room) => sum + room.occupied, 0);
-  const totalAvailable = rooms.reduce((sum, room) => sum + room.available, 0);
-
-  // Handle room number edit
-  const handleEditRoomNumber = (id, newNumber) => {
-    if (!newNumber || newNumber === '') {
-      triggerToast('Room number cannot be empty!', 'error');
+    if (roomsArray.length === 0) {
+      toast.error('Add at least one room type');
+      setPublishLoading(false);
       return;
     }
-    setRooms(rooms.map(room =>
-      room.id === id ? { ...room, roomNumber: newNumber } : room
-    ));
-    triggerToast(`Room number updated to ${newNumber}!`);
-  };
 
-  // Handle add new room
-  const handleAddRoom = (e) => {
-    e.preventDefault();
-    if (!newRoom.roomNumber) {
-      triggerToast('Please enter a room number!', 'error');
-      return;
+    const formData = new FormData();
+    formData.append('name', newHostel.name);
+    formData.append('location', newHostel.location);
+    formData.append('type', newHostel.type);
+    formData.append('price', newHostel.price);
+    formData.append('facilities', JSON.stringify(newHostel.facilities));
+    formData.append('rooms', JSON.stringify(roomsArray));
+    newHostel.images.forEach(file => formData.append('images', file));
+
+    try {
+      const res = await api.post('/hostels', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+      toast.success('Hostel published!');
+      setHostels(prev => [...prev, res.data]);
+      setSelectedHostel(res.data);
+      setRooms(res.data.rooms || []);
+      setNewHostel({ name: '', location: '', type: 'Boys Hostel', price: '', facilities: [], images: [] });
+      setRoomTypes({ single: { count: '', price: '' }, double: { count: '', price: '' }, triple: { count: '', price: '' }, five: { count: '', price: '' } });
+      setActiveTab('manage');
+    } catch (err) {
+      toast.error('Failed to publish hostel');
+    } finally {
+      setPublishLoading(false);
     }
-    const totalSeats = parseInt(newRoom.totalSeats);
-    const occupied = parseInt(newRoom.occupied) || 0;
-    if (occupied > totalSeats) {
-      triggerToast('Occupied seats cannot exceed total seats!', 'error');
-      return;
+  };
+
+  // Update selected hostel
+  const handleHostelSelect = async (hostel) => {
+    setSelectedHostel(hostel);
+    setRooms(hostel.rooms || []);
+    const bookingsRes = await api.get('/bookings/owner');
+    setBookings(bookingsRes.data);
+    const reviewsRes = await api.get(`/reviews/${hostel._id}`);
+    setReviews(reviewsRes.data);
+  };
+
+  // Edit hostel
+  const handleEditHostel = async () => {
+    try {
+      const formData = new FormData();
+      formData.append('name', editHostel.name);
+      formData.append('location', editHostel.location);
+      formData.append('type', editHostel.type);
+      formData.append('price', editHostel.price);
+      formData.append('facilities', JSON.stringify(editHostel.facilities));
+      editHostel.images.forEach(file => formData.append('images', file));
+
+      const res = await api.put(`/hostels/${editHostel._id}`, formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+      toast.success('Hostel updated!');
+      setHostels(prev => prev.map(h => h._id === res.data._id ? res.data : h));
+      setSelectedHostel(res.data);
+      setRooms(res.data.rooms || []);
+      setShowEditModal(false);
+    } catch (err) {
+      toast.error('Failed to update hostel');
     }
-    const newRoomData = {
-      id: rooms.length + 1,
-      roomNumber: newRoom.roomNumber,
-      type: newRoom.type,
-      totalSeats,
-      occupied,
-      available: totalSeats - occupied,
-      status: totalSeats - occupied === 0 ? 'Full' :
-              totalSeats - occupied === totalSeats ? 'Vacant' : 'Partial',
-    };
-    setRooms([...rooms, newRoomData]);
-    setNewRoom({ roomNumber: '', type: 'Single', totalSeats: 1, occupied: 0 });
-    triggerToast(`Room ${newRoomData.roomNumber} added successfully!`);
   };
 
-  // Filter and search logic
-  const filteredRooms = rooms.filter(room => {
-    const matchesType = filterType === 'All' || room.type === filterType;
-    const matchesSearch = room.roomNumber.toLowerCase().includes(searchQuery.toLowerCase());
-    return matchesType && matchesSearch;
-  });
-
-  // Mock data for other tabs
-  const mockBookings = [
-    { id: 1, student: 'Rahul Sharma', room: 'Room 101', checkIn: '2025-01-10', status: 'Confirmed' },
-    { id: 2, student: 'Priya Singh', room: 'Room 105', checkIn: '2025-01-15', status: 'Pending' },
-    { id: 3, student: 'Vikram Singh', room: 'Room 201', checkIn: '2025-01-20', status: 'Confirmed' },
-  ];
-
-  const mockReviews = [
-    { id: 1, student: 'Amit Kumar', rating: 4.8, comment: 'Great facilities and clean rooms!', date: '2025-12-10' },
-    { id: 2, student: 'Neha Gupta', rating: 4.5, comment: 'Good food and helpful staff.', date: '2025-12-05' },
-    { id: 3, student: 'Rohan Patel', rating: 5.0, comment: 'Best hostel in the area!', date: '2025-12-01' },
-  ];
-
-  const handleImageChange = (e) => {
-    const files = Array.from(e.target.files);
-    setSelectedImages(files.map(file => URL.createObjectURL(file)));
-  };
-
-  const handleAddHostel = (e) => {
-    e.preventDefault();
-    const totalAvailableSeats = Object.keys(roomTypes).reduce((total, sharing) => {
-      const seatsPerRoom = parseInt(sharing);
-      const numRooms = parseInt(roomTypes[sharing].rooms) || 0;
-      return total + (seatsPerRoom * numRooms);
-    }, 0);
-    if (totalAvailableSeats === 0) {
-      triggerToast('Please add at least one room!', 'error');
-      return;
+  // Delete hostel
+  const handleDeleteHostel = async () => {
+    try {
+      await api.delete(`/hostels/${selectedHostel._id}`);
+      toast.success('Hostel deleted');
+      setHostels(prev => prev.filter(h => h._id !== selectedHostel._id));
+      setSelectedHostel(hostels[0] || null);
+      setShowDeleteModal(false);
+    } catch (err) {
+      toast.error('Failed to delete hostel');
     }
-    triggerToast(`Hostel added with ${totalAvailableSeats} seats!`);
-    setHostelName('');
-    setSelectedImages([]);
-    setRoomTypes({
-      1: { rooms: 0, price: 0 },
-      2: { rooms: 0, price: 0 },
-      3: { rooms: 0, price: 0 },
-      5: { rooms: 0, price: 0 },
-    });
   };
 
-  const menuItems = [
-    { key: 'add', icon: 'bi-building-add', label: 'Add New Hostel' },
-    { key: 'manage', icon: 'bi-people-fill', label: 'Manage Seats' },
-    { key: 'bookings', icon: 'bi-calendar-check', label: 'View Bookings' },
-    { key: 'reviews', icon: 'bi-star-fill', label: 'View Reviews' },
-  ];
+  if (loading) {
+    return <div className="d-flex justify-content-center min-vh-100 align-items-center"><Spinner animation="border" /></div>;
+  }
 
   return (
-    <section className="owner-dashboard min-vh-100 py-5 bg-light">
+    <section className="py-5 bg-light">
       <Container fluid>
         <Row>
           {/* Sidebar */}
           <Col lg={3} md={4} className="mb-4">
-            <div className="dashboard-sidebar p-4 rounded-4 shadow-lg sticky-top" style={{ top: '20px' }}>
-              <div className="text-center mb-5">
+            <div className="dashboard-sidebar p-4 rounded-4 shadow-lg sticky-top bg-white" style={{ top: '20px' }}>
+              <div className="text-center mb-4">
                 <div className="bg-primary text-white rounded-circle mx-auto d-flex align-items-center justify-content-center mb-3" style={{ width: '80px', height: '80px' }}>
                   <i className="bi bi-building fs-1"></i>
                 </div>
-                <h4 className="fw-bold text-primary">Owner Panel</h4>
-                <p className="text-muted small">Sunrise Boys Hostel</p>
+                <h4 className="fw-bold text-primary">Owner Dashboard</h4>
               </div>
+
+              <Dropdown className="mb-4">
+                <Dropdown.Toggle variant="outline-primary" className="w-100">
+                  {selectedHostel ? selectedHostel.name : 'Select Hostel'}
+                </Dropdown.Toggle>
+                <Dropdown.Menu>
+                  {hostels.map(h => (
+                    <Dropdown.Item key={h._id} onClick={() => handleHostelSelect(h)}>
+                      {h.name}
+                    </Dropdown.Item>
+                  ))}
+                  {hostels.length === 0 && <Dropdown.Item disabled>No hostels yet</Dropdown.Item>}
+                </Dropdown.Menu>
+              </Dropdown>
+
               <div className="nav flex-column">
-                {menuItems.map(item => (
+                {[
+                  { key: 'add', icon: 'bi-building-add', label: 'Add New Hostel' },
+                  { key: 'manage', icon: 'bi-people-fill', label: 'Manage Seats' },
+                  { key: 'bookings', icon: 'bi-calendar-check', label: 'View Bookings' },
+                  { key: 'reviews', icon: 'bi-star-fill', label: 'View Reviews' },
+                ].map(item => (
                   <button
                     key={item.key}
-                    className={`nav-link d-flex align-items-center mb-3 rounded-pill fw-medium px-4 py-3 transition-all ${
-                      activeTab === item.key ? 'active-tab text-white' : 'text-muted hover-bg'
+                    className={`nav-link d-flex align-items-center mb-3 rounded-pill fw-medium px-4 py-3 ${
+                      activeTab === item.key ? 'bg-primary text-white' : 'text-muted hover-bg-light'
                     }`}
                     onClick={() => setActiveTab(item.key)}
                   >
@@ -185,93 +247,100 @@ function OwnerDashboard({ triggerToast }) {
 
           {/* Main Content */}
           <Col lg={9} md={8}>
-            <div className="content-card p-5 rounded-4 shadow-lg">
-              <h3 className="fw-bold text-primary mb-4">
-                {activeTab === 'add' && 'Add New Hostel'}
-                {activeTab === 'manage' && 'Manage Seat Availability'}
-                {activeTab === 'bookings' && 'Recent Bookings'}
-                {activeTab === 'reviews' && 'Customer Reviews'}
-              </h3>
+            <div className="content-card p-5 rounded-4 shadow-lg bg-white">
+              <div className="d-flex justify-content-between align-items-center mb-4">
+                <h3 className="fw-bold text-primary">
+                  {activeTab === 'add' && 'Add New Hostel'}
+                  {activeTab === 'manage' && 'Manage Seats'}
+                  {activeTab === 'bookings' && 'Bookings'}
+                  {activeTab === 'reviews' && 'Reviews'}
+                </h3>
 
-              {/* Manage Seats Tab - Enhanced */}
-              {activeTab === 'manage' && (
+                {selectedHostel && activeTab !== 'add' && (
+                  <div>
+                    <Button variant="outline-primary" size="sm" className="me-2" onClick={() => {
+                      setEditHostel({ ...selectedHostel });
+                      setShowEditModal(true);
+                    }}>
+                      Edit Hostel
+                    </Button>
+                    <Button variant="outline-danger" size="sm" onClick={() => setShowDeleteModal(true)}>
+                      Delete Hostel
+                    </Button>
+                  </div>
+                )}
+              </div>
+
+              {/* Add Hostel */}
+              {activeTab === 'add' && (
+                <Form onSubmit={handlePublishHostel}>
+                  {/* Name, Location, Type, Price */}
+                  <Row className="mb-4 g-3">
+                    <Col md={6}><Form.Control placeholder="Hostel Name" value={newHostel.name} onChange={e => setNewHostel({ ...newHostel, name: e.target.value })} required /></Col>
+                    <Col md={6}><Form.Control placeholder="Location" value={newHostel.location} onChange={e => setNewHostel({ ...newHostel, location: e.target.value })} required /></Col>
+                  </Row>
+                  <Row className="mb-4 g-3">
+                    <Col md={6}>
+                      <Form.Select value={newHostel.type} onChange={e => setNewHostel({ ...newHostel, type: e.target.value })}>
+                        <option>Boys Hostel</option>
+                        <option>Girls Hostel</option>
+                      </Form.Select>
+                    </Col>
+                    <Col md={6}>
+                      <Form.Control type="number" placeholder="Price per Seat (₹)" value={newHostel.price} onChange={e => setNewHostel({ ...newHostel, price: e.target.value })} required />
+                    </Col>
+                  </Row>
+
+                  {/* Facilities */}
+                  <div className="mb-4">
+                    <Form.Label className="fw-bold">Facilities</Form.Label>
+                    <Row className="g-3">
+                      {facilitiesOptions.map(f => (
+                        <Col md={3} key={f}>
+                          <Form.Check type="checkbox" label={f} checked={newHostel.facilities.includes(f)} onChange={() => toggleFacility(f)} />
+                        </Col>
+                      ))}
+                    </Row>
+                  </div>
+
+                  {/* Rooms */}
+                  <div className="mb-5">
+                    <h5 className="fw-bold text-primary mb-3">Room Types</h5>
+                    {Object.entries(roomTypes).map(([key, data]) => (
+                      <Row key={key} className="mb-3 g-3">
+                        <Col md={4}>
+                          <Form.Control type="number" placeholder={`${key.charAt(0).toUpperCase() + key.slice(1)} Rooms`} value={data.count} onChange={e => setRoomTypes({ ...roomTypes, [key]: { ...data, count: e.target.value } })} />
+                        </Col>
+                        <Col md={4}>
+                          <Form.Control type="number" placeholder="Price per Seat (₹)" value={data.price} onChange={e => setRoomTypes({ ...roomTypes, [key]: { ...data, price: e.target.value } })} />
+                        </Col>
+                      </Row>
+                    ))}
+                  </div>
+
+                  {/* Images */}
+                  <div className="mb-4">
+                    <Form.Label className="fw-bold">Images</Form.Label>
+                    <Form.Control type="file" multiple onChange={e => setNewHostel({ ...newHostel, images: Array.from(e.target.files) })} />
+                  </div>
+
+                  <Button type="submit" variant="success" size="lg" className="w-100" disabled={publishLoading}>
+                    {publishLoading ? <><Spinner as="span" animation="border" size="sm" className="me-2" /> Publishing...</> : 'Publish Hostel'}
+                  </Button>
+                </Form>
+              )}
+
+              {/* Manage Seats */}
+              {activeTab === 'manage' && selectedHostel && (
                 <>
-                  {/* Summary Cards */}
-                  <Row className="mb-5 g-4">
-                    <Col md={4}>
-                      <Card className="text-center border-0 shadow-sm">
-                        <Card.Body>
-                          <i className="bi bi-building fs-1 text-primary mb-3"></i>
-                          <h5>Total Seats</h5>
-                          <h3 className="fw-bold text-dark">{totalSeats}</h3>
-                        </Card.Body>
-                      </Card>
-                    </Col>
-                    <Col md={4}>
-                      <Card className="text-center border-0 shadow-sm">
-                        <Card.Body>
-                          <i className="bi bi-person-check fs-1 text-success mb-3"></i>
-                          <h5>Occupied</h5>
-                          <h3 className="fw-bold text-success">{totalOccupied}</h3>
-                        </Card.Body>
-                      </Card>
-                    </Col>
-                    <Col md={4}>
-                      <Card className="text-center border-0 shadow-sm">
-                        <Card.Body>
-                          <i className="bi bi-person-plus fs-1 text-warning mb-3"></i>
-                          <h5>Available</h5>
-                          <h3 className="fw-bold text-warning">{totalAvailable}</h3>
-                        </Card.Body>
-                      </Card>
-                    </Col>
+                  <Row className="g-4 mb-5">
+                    <Col md={3}><Card className="text-center shadow-sm"><Card.Body><h6>Total Seats</h6><h4>{totalSeats}</h4></Card.Body></Card></Col>
+                    <Col md={3}><Card className="text-center shadow-sm"><Card.Body><h6>Occupied</h6><h4>{totalOccupied}</h4></Card.Body></Card></Col>
+                    <Col md={3}><Card className="text-center shadow-sm"><Card.Body><h6>Available</h6><h4>{totalAvailable}</h4></Card.Body></Card></Col>
+                    <Col md={3}><Card className="text-center shadow-sm"><Card.Body><h6>Pending Bookings</h6><h4>{pendingBookings}</h4></Card.Body></Card></Col>
                   </Row>
 
-                  {/* Filters and Search */}
-                  <Row className="mb-4 align-items-center">
-                    <Col md={4}>
-                      <Form.Group>
-                        <Form.Label className="fw-bold">Filter by Room Type</Form.Label>
-                        <Form.Select
-                          value={filterType}
-                          onChange={(e) => setFilterType(e.target.value)}
-                          className="stylish-input"
-                        >
-                          <option value="All">All Types</option>
-                          <option value="Single">Single</option>
-                          <option value="2-Sharing">2-Sharing</option>
-                          <option value="3-Sharing">3-Sharing</option>
-                          <option value="5-Sharing">5-Sharing</option>
-                        </Form.Select>
-                      </Form.Group>
-                    </Col>
-                    <Col md={4}>
-                      <Form.Group>
-                        <Form.Label className="fw-bold">Search Room Number</Form.Label>
-                        <InputGroup>
-                          <InputGroup.Text><i className="bi bi-search"></i></InputGroup.Text>
-                          <Form.Control
-                            type="text"
-                            placeholder="Enter room number..."
-                            value={searchQuery}
-                            onChange={(e) => setSearchQuery(e.target.value)}
-                          />
-                        </InputGroup>
-                      </Form.Group>
-                    </Col>
-                    <Col md={4} className="text-end">
-                      <Button
-                        variant="primary"
-                        className="mt-4 rounded-pill px-4 py-2 fw-bold"
-                        onClick={() => document.getElementById('add-room-form').scrollIntoView({ behavior: 'smooth' })}
-                      >
-                        <i className="bi bi-plus-circle me-2"></i>Add New Room
-                      </Button>
-                    </Col>
-                  </Row>
-
-                  {/* Rooms Table */}
-                  <Table responsive hover className="modern-table align-middle">
+                  <Table responsive hover className="mb-5">
                     <thead>
                       <tr>
                         <th>Room No.</th>
@@ -280,298 +349,166 @@ function OwnerDashboard({ triggerToast }) {
                         <th>Occupied</th>
                         <th>Available</th>
                         <th>Status</th>
-                        <th>Action</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {filteredRooms.length > 0 ? (
-                        filteredRooms.map(room => (
-                          <tr key={room.id}>
-                            <td>
-                              <span
-                                className="editable-room text-primary fw-bold"
-                                onClick={() => {
-                                  const newNumber = prompt('Enter new room number:', room.roomNumber);
-                                  if (newNumber) handleEditRoomNumber(room.id, newNumber);
-                                }}
-                                style={{ cursor: 'pointer', textDecoration: 'underline' }}
-                              >
-                                {room.roomNumber}
-                              </span>
-                            </td>
-                            <td><Badge bg="info" className="fs-6">{room.type}</Badge></td>
-                            <td>{room.totalSeats}</td>
-                            <td>{room.occupied}</td>
-                            <td className="fw-bold text-success">{room.available}</td>
-                            <td>
-                              <Badge bg={
-                                room.status === 'Vacant' ? 'success' :
-                                room.status === 'Full' ? 'danger' : 'warning'
-                              }>
-                                {room.status}
-                              </Badge>
-                            </td>
-                            <td>
-                              <Button size="sm" variant="outline-primary" onClick={() => triggerToast(`Editing ${room.roomNumber} (Mock)`)}>
-                                <i className="bi bi-pencil"></i> Edit
-                              </Button>
-                            </td>
-                          </tr>
-                        ))
-                      ) : (
-                        <tr>
-                          <td colSpan="7" className="text-center py-5 text-muted">
-                            <i className="bi bi-search fs-1 d-block mb-3"></i>
-                            No rooms match your filter/search.
+                      {rooms.map(room => (
+                        <tr key={room._id}>
+                          <td>{room.roomNumber || 'N/A'}</td>
+                          <td>{room.type || 'N/A'}</td>
+                          <td>{room.totalSeats || 0}</td>
+                          <td>
+                            <Form.Control
+                              type="number"
+                              min="0"
+                              max={room.totalSeats || 0}
+                              value={room.occupied || 0}
+                              onChange={e => {
+                                const updatedRooms = rooms.map(r => r._id === room._id ? { ...r, occupied: Number(e.target.value) } : r);
+                                setRooms(updatedRooms);
+                                api.put(`/hostels/${selectedHostel._id}`, { rooms: updatedRooms });
+                              }}
+                            />
+                          </td>
+                          <td>{(room.totalSeats || 0) - (room.occupied || 0)}</td>
+                          <td>
+                            <Badge bg={(room.totalSeats || 0) === (room.occupied || 0) ? 'danger' : 'success'}>
+                              {(room.totalSeats || 0) === (room.occupied || 0) ? 'Full' : 'Available'}
+                            </Badge>
                           </td>
                         </tr>
-                      )}
+                      ))}
+                      {rooms.length === 0 && <tr><td colSpan="6" className="text-center py-5">No rooms yet</td></tr>}
                     </tbody>
                   </Table>
-
-                  {/* Add New Room Form */}
-                  <Card id="add-room-form" className="mt-5 p-4 shadow-lg">
-                    <h5 className="fw-bold text-primary mb-4">
-                      <i className="bi bi-plus-circle me-2"></i>Add New Room
-                    </h5>
-                    <Form onSubmit={handleAddRoom}>
-                      <Row>
-                        <Col md={3}>
-                          <div className="form-floating mb-3">
-                            <input
-                              type="text"
-                              className="form-control"
-                              value={newRoom.roomNumber}
-                              onChange={(e) => setNewRoom({ ...newRoom, roomNumber: e.target.value })}
-                              placeholder="Room Number"
-                              required
-                            />
-                            <label>Room Number</label>
-                          </div>
-                        </Col>
-                        <Col md={3}>
-                          <div className="form-floating mb-3">
-                            <select
-                              className="form-select"
-                              value={newRoom.type}
-                              onChange={(e) => setNewRoom({
-                                ...newRoom,
-                                type: e.target.value,
-                                totalSeats: e.target.value === 'Single' ? 1 :
-                                          e.target.value === '2-Sharing' ? 2 :
-                                          e.target.value === '3-Sharing' ? 3 : 5
-                              })}
-                            >
-                              <option value="Single">Single</option>
-                              <option value="2-Sharing">2-Sharing</option>
-                              <option value="3-Sharing">3-Sharing</option>
-                              <option value="5-Sharing">5-Sharing</option>
-                            </select>
-                            <label>Room Type</label>
-                          </div>
-                        </Col>
-                        <Col md={2}>
-                          <div className="form-floating mb-3">
-                            <input
-                              type="number"
-                              className="form-control"
-                              value={newRoom.totalSeats}
-                              onChange={(e) => setNewRoom({ ...newRoom, totalSeats: e.target.value })}
-                              min="1"
-                              readOnly
-                            />
-                            <label>Total Seats</label>
-                          </div>
-                        </Col>
-                        <Col md={2}>
-                          <div className="form-floating mb-3">
-                            <input
-                              type="number"
-                              className="form-control"
-                              value={newRoom.occupied}
-                              onChange={(e) => setNewRoom({ ...newRoom, occupied: e.target.value })}
-                              min="0"
-                              max={newRoom.totalSeats}
-                            />
-                            <label>Occupied</label>
-                          </div>
-                        </Col>
-                        <Col md={2}>
-                          <Button type="submit" className="w-100 h-100 rounded-pill fw-bold" variant="primary">
-                            <i className="bi bi-plus-lg me-2"></i>Add
-                          </Button>
-                        </Col>
-                      </Row>
-                    </Form>
-                  </Card>
                 </>
               )}
 
-              {/* Add Hostel Tab */}
-              {activeTab === 'add' && (
-                <Form onSubmit={handleAddHostel}>
-                  <Row className="mb-4">
-                    <Col md={8}>
-                      <div className="form-floating mb-4">
-                        <input
-                          type="text"
-                          className="form-control stylish-input"
-                          value={hostelName}
-                          onChange={(e) => setHostelName(e.target.value)}
-                          required
-                        />
-                        <label>Hostel Name</label>
-                      </div>
-                    </Col>
-                    <Col md={4}>
-                      <div className="form-floating mb-4">
-                        <select className="form-select stylish-input" required>
-                          <option>Boys Hostel</option>
-                          <option>Girls Hostel</option>
-                          <option>Co-Living</option>
-                        </select>
-                        <label>Hostel Type</label>
-                      </div>
-                    </Col>
-                  </Row>
-                  <div className="mb-4">
-                    <h5 className="fw-bold text-primary mb-4">Room Configuration</h5>
-                    {[1, 2, 3, 5].map(sharing => (
-                      <Card key={sharing} className="room-type-card mb-4 border-start border-primary border-5 shadow-sm">
-                        <Card.Body>
-                          <div className="d-flex justify-content-between align-items-center mb-3">
-                            <h6 className="fw-bold m-0">
-                              {sharing === 1 ? 'Single Room' : `${sharing}-Sharing Room`}
-                            </h6>
-                            <Badge bg="primary" className="fs-6">{sharing} bed{sharing > 1 && 's'}/room</Badge>
-                          </div>
-                          <Row>
-                            <Col md={6}>
-                              <div className="form-floating mb-3">
-                                <input
-                                  type="number"
-                                  className="form-control"
-                                  min="0"
-                                  value={roomTypes[sharing].rooms}
-                                  onChange={(e) => setRoomTypes({
-                                    ...roomTypes,
-                                    [sharing]: { ...roomTypes[sharing], rooms: e.target.value }
-                                  })}
-                                />
-                                <label>No. of Rooms</label>
-                              </div>
-                            </Col>
-                            <Col md={6}>
-                              <div className="form-floating mb-3">
-                                <input
-                                  type="number"
-                                  className="form-control"
-                                  min="1000"
-                                  step="100"
-                                  value={roomTypes[sharing].price}
-                                  onChange={(e) => setRoomTypes({
-                                    ...roomTypes,
-                                    [sharing]: { ...roomTypes[sharing], price: e.target.value }
-                                  })}
-                                />
-                                <label>Price per Seat (₹)</label>
-                              </div>
-                            </Col>
-                          </Row>
-                          <div className="text-end text-muted small">
-                            Seats from this type: <strong>{(sharing * (parseInt(roomTypes[sharing].rooms) || 0))}</strong>
-                          </div>
-                        </Card.Body>
-                      </Card>
-                    ))}
-                  </div>
-                  <Card className="bg-primary text-white p-4 mb-5 text-center shadow-lg">
-                    <h4 className="fw-bold mb-2">Total Available Seats</h4>
-                    <h2 className="display-4 fw-bold">
-                      {Object.keys(roomTypes).reduce((total, sharing) => {
-                        return total + (parseInt(sharing) * (parseInt(roomTypes[sharing].rooms) || 0));
-                      }, 0)}
-                    </h2>
-                    <p className="mb-0">All seats will be marked as available initially</p>
-                  </Card>
-                  <div className="mb-4">
-                    <label className="form-label fw-bold">Facilities Included</label>
-                    <div className="row g-3">
-                      {['WiFi', 'Food', 'Laundry', 'AC', 'Power Backup', 'CCTV', 'Gym', 'Housekeeping'].map(fac => (
-                        <div key={fac} className="col-md-3 col-6">
-                          <div className="form-check">
-                            <input className="form-check-input" type="checkbox" id={fac} defaultChecked={['WiFi', 'Food', 'CCTV'].includes(fac)} />
-                            <label className="form-check-label fw-medium" htmlFor={fac}>{fac}</label>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                  <div className="mb-5">
-                    <label className="form-label fw-bold">Hostel Images</label>
-                    <input type="file" className="form-control" multiple accept="image/*" onChange={handleImageChange} />
-                    {selectedImages.length > 0 && (
-                      <div className="mt-3 row g-3">
-                        {selectedImages.map((img, i) => (
-                          <div key={i} className="col-3">
-                            <img src={img} alt="preview" className="img-fluid rounded-3 shadow" style={{ height: '120px', objectFit: 'cover' }} />
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                  <div className="text-center">
-                    <Button type="submit" size="lg" className="btn-primary px-7 py-3 rounded-pill fw-bold shadow-lg">
-                      <i className="bi bi-check-circle-fill me-2"></i>
-                      Publish Hostel
-                    </Button>
-                  </div>
-                </Form>
-              )}
+              {/* Bookings */}
               {activeTab === 'bookings' && (
-                <Table responsive hover className="modern-table">
+                <Table responsive hover>
                   <thead>
                     <tr>
                       <th>Student</th>
-                      <th>Room</th>
+                      <th>Room Type</th>
                       <th>Check-in</th>
                       <th>Status</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {mockBookings.map(b => (
-                      <tr key={b.id}>
-                        <td>{b.student}</td>
-                        <td>{b.room}</td>
-                        <td>{b.checkIn}</td>
-                        <td><Badge bg={b.status === 'Confirmed' ? 'success' : 'warning'}>{b.status}</Badge></td>
-                      </tr>
-                    ))}
+                    {bookings.length === 0 ? (
+                      <tr><td colSpan="4" className="text-center py-5">No bookings yet</td></tr>
+                    ) : (
+                      bookings.map(b => (
+                        <tr key={b._id}>
+                          <td>{b.user?.name || 'N/A'}</td>
+                          <td>{b.roomType}</td>
+                          <td>{new Date(b.checkInDate).toLocaleDateString()}</td>
+                          <td>
+                            <Badge bg={b.status === 'Confirmed' ? 'success' : b.status === 'Rejected' ? 'danger' : 'warning'}>
+                              {b.status}
+                            </Badge>
+                          </td>
+                        </tr>
+                      ))
+                    )}
                   </tbody>
                 </Table>
               )}
+
+              {/* Reviews */}
               {activeTab === 'reviews' && (
                 <div>
-                  {mockReviews.map(r => (
-                    <div key={r.id} className="review-card p-4 mb-4 rounded-4 shadow-sm border-start border-warning border-5">
-                      <div className="d-flex justify-content-between">
-                        <div>
-                          <h6 className="fw-bold">{r.student}</h6>
-                          <p className="text-warning mb-1">
-                            {'★★★★★'.substring(0, Math.floor(r.rating))}{'☆☆☆☆☆'.substring(0, 5 - Math.floor(r.rating))} {r.rating}
-                          </p>
-                          <p>{r.comment}</p>
-                        </div>
-                        <small className="text-muted">{r.date}</small>
-                      </div>
-                    </div>
-                  ))}
+                  {reviews.length === 0 ? (
+                    <p className="text-muted">No reviews yet</p>
+                  ) : (
+                    reviews.map(r => (
+                      <Card key={r._id} className="mb-3">
+                        <Card.Body>
+                          <div className="d-flex justify-content-between">
+                            <div>
+                              <h6>{r.user?.name || 'Anonymous'}</h6>
+                              <div className="text-warning">
+                                {'★'.repeat(r.rating)}{'☆'.repeat(5 - r.rating)}
+                              </div>
+                            </div>
+                            <small>{new Date(r.createdAt).toLocaleDateString()}</small>
+                          </div>
+                          <p className="mt-2">{r.comment || 'No comment'}</p>
+                        </Card.Body>
+                      </Card>
+                    ))
+                  )}
                 </div>
               )}
             </div>
           </Col>
         </Row>
       </Container>
+
+      {/* Delete Confirmation */}
+      <Modal show={showDeleteModal} onHide={() => setShowDeleteModal(false)} centered>
+        <Modal.Header closeButton>
+          <Modal.Title>Delete Hostel</Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          Are you sure you want to delete <strong>{selectedHostel?.name}</strong>? This cannot be undone.
+        </Modal.Body>
+        <Modal.Footer>
+          <Button variant="secondary" onClick={() => setShowDeleteModal(false)}>Cancel</Button>
+          <Button variant="danger" onClick={handleDeleteHostel}>Delete</Button>
+        </Modal.Footer>
+      </Modal>
+
+      {/* Edit Hostel Modal */}
+      <Modal show={showEditModal} onHide={() => setShowEditModal(false)} size="lg">
+        <Modal.Header closeButton>
+          <Modal.Title>Edit Hostel</Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          {editHostel && (
+            <Form>
+              <Form.Group className="mb-3">
+                <Form.Label>Hostel Name</Form.Label>
+                <Form.Control value={editHostel.name} onChange={e => setEditHostel({ ...editHostel, name: e.target.value })} />
+              </Form.Group>
+              <Form.Group className="mb-3">
+                <Form.Label>Location</Form.Label>
+                <Form.Control value={editHostel.location} onChange={e => setEditHostel({ ...editHostel, location: e.target.value })} />
+              </Form.Group>
+              <Form.Group className="mb-3">
+                <Form.Label>Type</Form.Label>
+                <Form.Select value={editHostel.type} onChange={e => setEditHostel({ ...editHostel, type: e.target.value })}>
+                  <option>Boys Hostel</option>
+                  <option>Girls Hostel</option>
+                </Form.Select>
+              </Form.Group>
+              <Form.Group className="mb-3">
+                <Form.Label>Price per Seat</Form.Label>
+                <Form.Control type="number" value={editHostel.price} onChange={e => setEditHostel({ ...editHostel, price: e.target.value })} />
+              </Form.Group>
+              <Form.Group className="mb-3">
+                <Form.Label>Facilities</Form.Label>
+                <Row className="g-3">
+                  {facilitiesOptions.map(f => (
+                    <Col md={3} key={f}>
+                      <Form.Check type="checkbox" label={f} checked={editHostel.facilities.includes(f)} onChange={() => toggleFacility(f, true)} />
+                    </Col>
+                  ))}
+                </Row>
+              </Form.Group>
+              <Form.Group className="mb-3">
+                <Form.Label>New Images (optional)</Form.Label>
+                <Form.Control type="file" multiple onChange={e => setEditHostel({ ...editHostel, images: Array.from(e.target.files) })} />
+              </Form.Group>
+            </Form>
+          )}
+        </Modal.Body>
+        <Modal.Footer>
+          <Button variant="secondary" onClick={() => setShowEditModal(false)}>Cancel</Button>
+          <Button variant="primary" onClick={handleEditHostel}>Save Changes</Button>
+        </Modal.Footer>
+      </Modal>
     </section>
   );
 }

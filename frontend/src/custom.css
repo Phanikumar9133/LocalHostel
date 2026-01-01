@@ -507,3 +507,13 @@ body {
 .profile-page .card {
   transition: all 0.3s ease;
 }
+.bg-light {
+  background-color: #f8f9fa !important;
+}
+.hover-lift {
+  transition: all 0.3s ease;
+}
+.hover-lift:hover {
+  transform: translateY(-10px);
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.15) !important;
+}
