@@ -1,3 +1,4 @@
+// controllers/hostelController.js
 const Hostel = require('../models/Hostel');
 
 exports.getAllHostels = async (req, res) => {
@@ -29,19 +30,19 @@ exports.createHostel = async (req, res) => {
   try {
     const { name, location, type, price, facilities, rooms } = req.body;
 
-    // Handle uploaded images
-    const images = req.files ? req.files.map(file => `/uploads/${file.filename}`) : [];
-
-    if (images.length === 0) {
+    if (!req.files || req.files.length === 0) {
       return res.status(400).json({ message: 'At least one image is required' });
     }
+
+    // FIXED: Use file.path from Cloudinary (full URL)
+    const images = req.files.map(file => file.path);
 
     const hostel = await Hostel.create({
       name,
       location,
       type,
       price: Number(price),
-      images,
+      images,  // Now full Cloudinary URLs
       facilities: facilities ? JSON.parse(facilities) : [],
       rooms: rooms ? JSON.parse(rooms) : [],
       owner: req.user._id,
@@ -53,6 +54,7 @@ exports.createHostel = async (req, res) => {
 
     res.status(201).json(hostel);
   } catch (error) {
+    console.error('Create Hostel Error:', error);
     res.status(500).json({ message: error.message });
   }
 };
@@ -73,12 +75,13 @@ exports.updateHostel = async (req, res) => {
     if (facilities) hostel.facilities = JSON.parse(facilities);
     if (rooms) hostel.rooms = JSON.parse(rooms);
 
-    // Append new images
+    // FIXED: Add new images with full Cloudinary URLs
     if (req.files && req.files.length > 0) {
-      const newImages = req.files.map(file => `/uploads/${file.filename}`);
+      const newImages = req.files.map(file => file.path);
       hostel.images = [...hostel.images, ...newImages];
     }
 
+    // Recalculate available seats
     hostel.availableSeats = hostel.rooms.reduce(
       (sum, room) => sum + (room.totalSeats - (room.occupied || 0)),
       0
@@ -87,6 +90,7 @@ exports.updateHostel = async (req, res) => {
     await hostel.save();
     res.json(hostel);
   } catch (error) {
+    console.error('Update Hostel Error:', error);
     res.status(500).json({ message: error.message });
   }
 };
@@ -97,8 +101,8 @@ exports.deleteHostel = async (req, res) => {
     if (!hostel || hostel.owner.toString() !== req.user._id.toString()) {
       return res.status(403).json({ message: 'Access denied' });
     }
-    await hostel.remove();
-    res.json({ message: 'Hostel deleted' });
+    await Hostel.deleteOne({ _id: req.params.id });
+    res.json({ message: 'Hostel deleted successfully' });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }

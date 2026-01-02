@@ -3,7 +3,7 @@ const multer = require('multer');
 const { CloudinaryStorage } = require('multer-storage-cloudinary');
 const cloudinary = require('cloudinary').v2;
 
-// Configure Cloudinary with your actual credentials
+// Configure Cloudinary
 cloudinary.config({
   cloud_name: 'ducj18p7q',
   api_key: '696345625921575',
@@ -14,12 +14,17 @@ cloudinary.config({
 const storage = new CloudinaryStorage({
   cloudinary: cloudinary,
   params: {
-    folder: 'hostelhub',                    // Images will be organized in this folder
-    allowed_formats: ['jpg', 'jpeg', 'png', 'webp'],
+    folder: 'hostelhub',
+    // Allow ALL common image formats (Cloudinary supports most)
+    allowed_formats: [
+      'jpg', 'jpeg', 'png', 'webp', 'gif', 'bmp', 'tiff', 'tif',
+      'svg', 'avif', 'heic', 'heif', 'ico'
+    ],
     transformation: [
-      { width: 1000, height: 800, crop: 'limit' },  // Prevents huge uploads
-      { quality: 'auto' },                           // Optimizes quality
-      { fetch_format: 'auto' }                       // Serves WebP when supported
+      { width: 1200, height: 900, crop: 'limit' },  // Prevent oversized uploads
+      { quality: 'auto:best' },                     // Best quality auto-optimization
+      { fetch_format: 'auto' },                     // Serve WebP/AVIF when supported
+      { flags: 'lossy' }                            // Enable compression
     ],
   },
 });
@@ -28,17 +33,21 @@ const storage = new CloudinaryStorage({
 const upload = multer({
   storage: storage,
   limits: {
-    fileSize: 5 * 1024 * 1024, // 5MB per file (same as before)
+    fileSize: 10 * 1024 * 1024, // Increased to 10MB per file (safe for high-res images)
+    files: 6,                   // Max 6 images
   },
   fileFilter: (req, file, cb) => {
-    const filetypes = /jpeg|jpg|png|webp/;
+    // Comprehensive regex for all image types
+    const filetypes = /jpeg|jpg|png|gif|webp|bmp|tiff|tif|svg|svg\+xml|ico|heic|heif|avif/i;
+    
     const mimetype = filetypes.test(file.mimetype);
     const extname = filetypes.test(require('path').extname(file.originalname).toLowerCase());
 
     if (mimetype && extname) {
       return cb(null, true);
     }
-    cb(new Error('Only image files are allowed! (jpeg, jpg, png, webp)'));
+    
+    cb(new Error('Error: Only image files are allowed! Supported: JPG, PNG, GIF, WebP, SVG, BMP, TIFF, AVIF, HEIC, ICO'));
   },
 });
 
