@@ -1,4 +1,5 @@
 // server.js
+// server.js
 
 const express = require('express');
 const dotenv = require('dotenv');
@@ -25,6 +26,7 @@ app.use('/api/hostels', require('./routes/hostelRoutes'));
 app.use('/api/bookings', require('./routes/bookingRoutes'));
 app.use('/api/reviews', require('./routes/reviewRoutes'));
 app.use('/api/profile', require('./routes/profileRoutes'));
+app.use('/api/admin', require('./routes/adminRoutes')); // NEW: Admin routes
 
 // Basic route for testing
 app.get('/', (req, res) => {

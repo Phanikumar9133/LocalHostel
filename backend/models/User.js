@@ -1,4 +1,4 @@
-// backend/models/User.js
+// models/User.js
 
 const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
@@ -23,7 +23,7 @@ const userSchema = new mongoose.Schema({
   },
   role: {
     type: String,
-    enum: ['user', 'owner'],
+    enum: ['user', 'owner', 'admin'],
     default: 'user',
   },
   phone: {

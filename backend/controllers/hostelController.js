@@ -9,7 +9,7 @@ exports.getAllHostels = async (req, res) => {
     if (type) filter.type = type;
     if (maxPrice) filter.price = { $lte: maxPrice };
 
-    const hostels = await Hostel.find(filter).populate('owner', 'name');
+    const hostels = await Hostel.find(filter).populate('owner', 'name email phone role');
     res.json(hostels);
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -18,7 +18,7 @@ exports.getAllHostels = async (req, res) => {
 
 exports.getHostelById = async (req, res) => {
   try {
-    const hostel = await Hostel.findById(req.params.id).populate('owner', 'name');
+    const hostel = await Hostel.findById(req.params.id).populate('owner', 'name email phone role');
     if (!hostel) return res.status(404).json({ message: 'Hostel not found' });
     res.json(hostel);
   } catch (error) {
@@ -62,7 +62,12 @@ exports.createHostel = async (req, res) => {
 exports.updateHostel = async (req, res) => {
   try {
     const hostel = await Hostel.findById(req.params.id);
-    if (!hostel || hostel.owner.toString() !== req.user._id.toString()) {
+    if (!hostel) {
+      return res.status(404).json({ message: 'Hostel not found' });
+    }
+
+    // Check access: Owner must own it, Admin can edit any
+    if (req.user.role !== 'admin' && hostel.owner.toString() !== req.user._id.toString()) {
       return res.status(403).json({ message: 'Access denied' });
     }
 
@@ -98,9 +103,15 @@ exports.updateHostel = async (req, res) => {
 exports.deleteHostel = async (req, res) => {
   try {
     const hostel = await Hostel.findById(req.params.id);
-    if (!hostel || hostel.owner.toString() !== req.user._id.toString()) {
+    if (!hostel) {
+      return res.status(404).json({ message: 'Hostel not found' });
+    }
+
+    // Check access: Owner must own it, Admin can delete any
+    if (req.user.role !== 'admin' && hostel.owner.toString() !== req.user._id.toString()) {
       return res.status(403).json({ message: 'Access denied' });
     }
+
     await Hostel.deleteOne({ _id: req.params.id });
     res.json({ message: 'Hostel deleted successfully' });
   } catch (error) {

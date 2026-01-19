@@ -1,32 +1,58 @@
+// middleware/authMiddleware.js
 const jwt = require('jsonwebtoken');
 const User = require('../models/User');
 
-const protect = async (req, res, next) => {  // Ensure 'next' is the third param
+const protect = async (req, res, next) => {
   let token;
-  console.log('protect middleware called');  // Debug log
   if (req.headers.authorization && req.headers.authorization.startsWith('Bearer')) {
     try {
       token = req.headers.authorization.split(' ')[1];
-      console.log('Token found:', token ? 'yes' : 'no');  // Debug
+      console.log('Token found:', token.substring(0, 20) + '...'); // partial for safety
+
       const decoded = jwt.verify(token, process.env.JWT_SECRET);
-      req.user = await User.findById(decoded.id).select('-password');
-      next();  // Call next() here
+      console.log('Decoded payload:', decoded);                    // ← IMPORTANT
+
+      const user = await User.findById(decoded.id).select('-password');
+      console.log('Found user ID:', user?._id?.toString());       // ← IMPORTANT
+      console.log('Found user role:', user?.role);
+
+      if (!user) {
+        console.log('WARNING: User not found in database for ID:', decoded.id);
+        return res.status(401).json({ message: 'Not authorized - user not found' });
+      }
+
+      req.user = user;
+      next();
     } catch (error) {
-      console.error('JWT Error:', error.message);  // Debug
-      res.status(401).json({ message: 'Not authorized, token failed' });
+      console.error('JWT/Protect Error:', error.name, error.message);
+      return res.status(401).json({ message: 'Not authorized, token failed' });
     }
   } else {
-    console.log('No token provided');  // Debug
     res.status(401).json({ message: 'Not authorized, no token' });
   }
 };
 
 const ownerOnly = (req, res, next) => {
-  if (req.user && req.user.role === 'owner') {
+  if (req.user && (req.user.role === 'owner' || req.user.role === 'admin')) {
     next();
   } else {
-    res.status(403).json({ message: 'Access denied: Owners only' });
+    res.status(403).json({ message: 'Access denied: Owners or Admins only' });
   }
 };
 
-module.exports = { protect, ownerOnly };
+// middleware/authMiddleware.js
+
+const adminOnly = (req, res, next) => {
+  console.log('Admin middleware check → User:', req.user?.id);
+  console.log('User role:', req.user?.role);
+  console.log('Is admin?', req.user?.role === 'admin');
+
+  if (req.user && req.user.role === 'admin') {
+    next();
+  } else {
+    res.status(403).json({ message: 'Access denied: Admins only' });
+  }
+};
+
+
+module.exports = { protect, ownerOnly, adminOnly };
