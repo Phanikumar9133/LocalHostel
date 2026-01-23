@@ -1,152 +1,200 @@
-// src/pages/OwnerDashboard.jsx
+// src/pages/OwnerDashboard.jsx - Complete Enhanced Version
 import { useState, useEffect } from 'react';
 import {
-  Container, Row, Col, Button, Form, Table, Badge,
-  Card, Modal, Spinner, Dropdown, Alert, Tabs, Tab,
-  InputGroup, ListGroup
+  Container,
+  Row,
+  Col,
+  Button,
+  Form,
+  Table,
+  Badge,
+  Card,
+  Modal,
+  Spinner,
+  Dropdown,
+  Alert,
+  InputGroup,
+  ListGroup,
+  FormCheck,
+  FormLabel,
+  FormGroup,
 } from 'react-bootstrap';
 import api from '../services/api';
 import { toast } from 'react-toastify';
 
 function OwnerDashboard({ triggerToast }) {
-  const [activeTab, setActiveTab] = useState('add');
+  // ─────────────────────────────────────────────────────────────────────────
+  // State Management - All States Properly Initialized
+  // ─────────────────────────────────────────────────────────────────────────
+  const [activeTab, setActiveTab] = useState('add'); // Default tab
   const [loading, setLoading] = useState(true);
   const [publishLoading, setPublishLoading] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
 
-  // Data states
-  const [hostels, setHostels] = useState([]);
-  const [selectedHostel, setSelectedHostel] = useState(null);
-  const [rooms, setRooms] = useState([]);
-  const [bookings, setBookings] = useState([]);
-  const [reviews, setReviews] = useState([]);
+  // Core Data States (always initialized as arrays/objects)
+  const [hostels, setHostels] = useState([]); // All owned hostels
+  const [selectedHostel, setSelectedHostel] = useState(null); // Currently selected hostel
+  const [rooms, setRooms] = useState([]); // Rooms of selected hostel
+  const [bookings, setBookings] = useState([]); // All bookings for owner
+  const [reviews, setReviews] = useState([]); // Reviews for selected hostel
 
-  // Add hostel form states
+  // Add New Hostel Form States
   const [newHostel, setNewHostel] = useState({
     name: '',
     location: '',
     type: 'Boys Hostel',
     price: '',
     facilities: [],
-    images: []
+    images: [],
   });
 
   const [roomTypesInput, setRoomTypesInput] = useState({
     single: { count: '', price: '' },
     double: { count: '', price: '' },
     triple: { count: '', price: '' },
-    five: { count: '', price: '' }
+    five: { count: '', price: '' },
   });
 
-  // Edit hostel states
+  // Edit Modal States
   const [showEditModal, setShowEditModal] = useState(false);
   const [editHostel, setEditHostel] = useState(null);
 
-  // Delete modal
+  // Delete Modal States
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [deleteHostelId, setDeleteHostelId] = useState(null);
 
-  // Facilities list
+  // Facilities Options
   const facilitiesOptions = [
     'Free WiFi', 'Food', 'Laundry', 'Power Backup',
     '24/7 Security', 'AC Rooms', 'CCTV', 'Housekeeping',
     'Parking', 'Study Room', 'Washing Machine', 'Gym',
-    'Elevator', 'Hot Water', 'RO Water', 'TV Room'
+    'Elevator', 'Hot Water', 'RO Water', 'TV Room',
   ];
 
-  // Fetch initial data
+  // ─────────────────────────────────────────────────────────────────────────
+  // Load All Dashboard Data
+  // ─────────────────────────────────────────────────────────────────────────
   useEffect(() => {
-    const fetchData = async () => {
+    const fetchOwnerData = async () => {
       try {
         setLoading(true);
 
+        // Get logged-in user
         const user = JSON.parse(localStorage.getItem('user') || '{}');
-        if (user.role !== 'owner') {
+        if (user.role !== 'owner' || !user._id) {
           toast.error('Only hostel owners can access this dashboard');
           return;
         }
 
-        // Get owner's hostels
+        // 1. Fetch all hostels and filter owned ones
         const hostelsRes = await api.get('/hostels');
-        const myHostels = hostelsRes.data.filter(h => h.owner?._id === user._id);
-        setHostels(myHostels);
+        const ownedHostels = Array.isArray(hostelsRes.data)
+          ? hostelsRes.data.filter((h) => h?.owner?._id === user._id)
+          : [];
+        setHostels(ownedHostels);
 
-        // Get all bookings for owner
+        // 2. Fetch all bookings for this owner
         const bookingsRes = await api.get('/bookings/owner');
-        setBookings(bookingsRes.data || []);
+        const bookingsData = Array.isArray(bookingsRes.data) ? bookingsRes.data : [];
+        setBookings(bookingsData);
 
-        // Select first hostel if exists
-        if (myHostels.length > 0) {
-          const first = myHostels[0];
-          setSelectedHostel(first);
-          setRooms(first.rooms || []);
-          await loadReviews(first._id);
+        // 3. Auto-select first hostel if any exist
+        if (ownedHostels.length > 0) {
+          const firstHostel = ownedHostels[0];
+          setSelectedHostel(firstHostel);
+          setRooms(Array.isArray(firstHostel.rooms) ? firstHostel.rooms : []);
+
+          // Load reviews for first hostel
+          try {
+            const reviewsRes = await api.get(`/reviews/${firstHostel._id}`);
+            setReviews(Array.isArray(reviewsRes.data) ? reviewsRes.data : []);
+          } catch (reviewErr) {
+            console.warn('Failed to load initial reviews:', reviewErr);
+            setReviews([]);
+          }
         }
       } catch (err) {
-        console.error(err);
-        toast.error('Failed to load dashboard data');
+        console.error('Dashboard data fetch failed:', err);
+        toast.error('Failed to load dashboard. Please refresh.');
       } finally {
         setLoading(false);
       }
     };
 
-    fetchData();
+    fetchOwnerData();
   }, []);
 
-  const loadReviews = async (hostelId) => {
+  // ─────────────────────────────────────────────────────────────────────────
+  // Handle Hostel Selection from Dropdown
+  // ─────────────────────────────────────────────────────────────────────────
+  const handleSelectHostel = async (hostel) => {
+    if (!hostel?._id) return;
+
+    setSelectedHostel(hostel);
+    setRooms(Array.isArray(hostel.rooms) ? hostel.rooms : []);
+
+    // Load reviews for the selected hostel
     try {
-      const res = await api.get(`/reviews/${hostelId}`);
-      setReviews(res.data || []);
+      const res = await api.get(`/reviews/${hostel._id}`);
+      setReviews(Array.isArray(res.data) ? res.data : []);
     } catch (err) {
-      console.error('Reviews fetch failed', err);
+      console.warn('Failed to load reviews for hostel:', hostel._id, err);
+      setReviews([]);
     }
   };
 
-  // When selecting different hostel
-  const handleSelectHostel = async (hostel) => {
-    setSelectedHostel(hostel);
-    setRooms(hostel.rooms || []);
-    await loadReviews(hostel._id);
-  };
-
-  // Aggregated room stats for selected hostel
-  const aggregatedRooms = {};
-  rooms.forEach(room => {
-    const type = room.type;
-    if (!aggregatedRooms[type]) {
-      aggregatedRooms[type] = {
+  // ─────────────────────────────────────────────────────────────────────────
+  // Calculate Aggregated Room Statistics
+  // ─────────────────────────────────────────────────────────────────────────
+  const aggregatedRooms = rooms.reduce((acc, room) => {
+    const type = room?.type || 'Unknown';
+    if (!acc[type]) {
+      acc[type] = {
         type,
         count: 0,
         totalSeats: 0,
         occupied: 0,
         available: 0,
-        price: room.price
+        price: room?.price || 0,
       };
     }
-    aggregatedRooms[type].count += 1;
-    aggregatedRooms[type].totalSeats += room.totalSeats || 0;
-    aggregatedRooms[type].occupied += room.occupied || 0;
-    aggregatedRooms[type].available += (room.totalSeats || 0) - (room.occupied || 0);
+    acc[type].count += 1;
+    acc[type].totalSeats += Number(room?.totalSeats || 0);
+    acc[type].occupied += Number(room?.occupied || 0);
+    acc[type].available += Number(room?.totalSeats || 0) - Number(room?.occupied || 0);
+    return acc;
+  }, {});
+
+  const seatStats = {
+    totalRooms: rooms.length,
+    totalSeats: 0,
+    occupied: 0,
+    available: 0,
+  };
+
+  Object.values(aggregatedRooms).forEach((agg) => {
+    seatStats.totalSeats += agg.totalSeats;
+    seatStats.occupied += agg.occupied;
+    seatStats.available += agg.available;
   });
 
-  const totalSeats = Object.values(aggregatedRooms).reduce((sum, r) => sum + r.totalSeats, 0);
-  const totalOccupied = Object.values(aggregatedRooms).reduce((sum, r) => sum + r.occupied, 0);
-  const totalAvailable = totalSeats - totalOccupied;
-  const pendingBookingsCount = bookings.filter(b => b.status === 'Pending').length;
+  const pendingBookingsCount = Array.isArray(bookings)
+    ? bookings.filter((b) => b?.status === 'Pending').length
+    : 0;
 
-  // Add new hostel
+  // ─────────────────────────────────────────────────────────────────────────
+  // Publish New Hostel
+  // ─────────────────────────────────────────────────────────────────────────
   const handlePublishHostel = async (e) => {
     e.preventDefault();
     setPublishLoading(true);
 
-    // Validate basic fields
     if (!newHostel.name.trim() || !newHostel.location.trim() || !newHostel.price) {
-      toast.error('Please fill all required fields');
+      toast.error('Name, location, and price are required');
       setPublishLoading(false);
       return;
     }
 
-    // Build rooms array from input
     const roomsArray = [];
     const seatsMap = { single: 1, double: 2, triple: 3, five: 5 };
     const typeMap = { single: 'Single', double: '2-Sharing', triple: '3-Sharing', five: '5-Sharing' };
@@ -154,22 +202,18 @@ function OwnerDashboard({ triggerToast }) {
     Object.entries(roomTypesInput).forEach(([key, { count, price }]) => {
       const numRooms = parseInt(count) || 0;
       const pricePerSeat = parseInt(price) || 0;
-
       if (numRooms > 0 && pricePerSeat > 0) {
-        const seatsPerRoom = seatsMap[key];
-        const totalSeats = numRooms * seatsPerRoom;
-
         roomsArray.push({
           type: typeMap[key],
-          totalSeats,
+          totalSeats: numRooms * seatsMap[key],
           occupied: 0,
-          price: pricePerSeat
+          price: pricePerSeat,
         });
       }
     });
 
     if (roomsArray.length === 0) {
-      toast.error('Please add at least one room type with valid count and price');
+      toast.error('Please add at least one valid room type');
       setPublishLoading(false);
       return;
     }
@@ -182,143 +226,199 @@ function OwnerDashboard({ triggerToast }) {
     formData.append('facilities', JSON.stringify(newHostel.facilities));
     formData.append('rooms', JSON.stringify(roomsArray));
 
-    newHostel.images.forEach(file => {
-      formData.append('images', file);
-    });
+    newHostel.images.forEach((file) => formData.append('images', file));
 
     try {
       const res = await api.post('/hostels', formData, {
-        headers: { 'Content-Type': 'multipart/form-data' }
+        headers: { 'Content-Type': 'multipart/form-data' },
       });
 
       toast.success('Hostel published successfully!');
-      setHostels(prev => [...prev, res.data]);
+      setHostels((prev) => [...prev, res.data]);
       setSelectedHostel(res.data);
-      setRooms(res.data.rooms || []);
+      setRooms(Array.isArray(res.data.rooms) ? res.data.rooms : []);
 
       // Reset form
-      setNewHostel({ name: '', location: '', type: 'Boys Hostel', price: '', facilities: [], images: [] });
+      setNewHostel({
+        name: '',
+        location: '',
+        type: 'Boys Hostel',
+        price: '',
+        facilities: [],
+        images: [],
+      });
       setRoomTypesInput({
         single: { count: '', price: '' },
         double: { count: '', price: '' },
         triple: { count: '', price: '' },
-        five: { count: '', price: '' }
+        five: { count: '', price: '' },
       });
 
       setActiveTab('manage');
     } catch (err) {
       toast.error(err.response?.data?.message || 'Failed to publish hostel');
+      console.error('Publish hostel error:', err);
     } finally {
       setPublishLoading(false);
     }
   };
 
-  // Update occupied seats for a room type
-  const updateOccupiedSeats = async (roomType, newOccupied) => {
-    const agg = aggregatedRooms[roomType];
-    if (!agg) return;
+  // ─────────────────────────────────────────────────────────────────────────
+  // Update Occupied Seats for Room Type
+  // ─────────────────────────────────────────────────────────────────────────
+  const handleOccupiedChange = async (roomType, newValue) => {
+    const newOccupied = Number(newValue);
+    if (isNaN(newOccupied) || newOccupied < 0) {
+      toast.warning('Invalid occupied count');
+      return;
+    }
 
-    const maxPossible = agg.totalSeats;
-    if (newOccupied < 0 || newOccupied > maxPossible) {
-      toast.error(`Occupied seats must be between 0 and ${maxPossible}`);
+    const agg = aggregatedRooms[roomType];
+    if (!agg || newOccupied > agg.totalSeats) {
+      toast.warning(`Occupied cannot exceed ${agg?.totalSeats || 0}`);
       return;
     }
 
     setActionLoading(true);
 
     try {
-      // Create updated rooms array
-      const updatedRooms = rooms.map(room => {
-        if (room.type === roomType) {
-          return { ...room, occupied: newOccupied };
-        }
-        return room;
-      });
+      const updatedRooms = rooms.map((room) =>
+        room.type === roomType ? { ...room, occupied: newOccupied } : room
+      );
 
       const res = await api.put(`/hostels/${selectedHostel._id}`, { rooms: updatedRooms });
 
-      // Update local state
       setRooms(updatedRooms);
-      setSelectedHostel(prev => ({
+      setSelectedHostel((prev) => ({
         ...prev,
         rooms: updatedRooms,
-        availableSeats: res.data.availableSeats || prev.availableSeats
+        availableSeats: res.data?.availableSeats ?? prev.availableSeats ?? 0,
       }));
 
-      toast.success('Occupied seats updated');
+      toast.success('Occupied seats updated successfully');
     } catch (err) {
       toast.error('Failed to update seats');
+      console.error('Occupied update error:', err);
     } finally {
       setActionLoading(false);
     }
   };
 
-  // Accept / Reject booking
- const handleBookingAction = async (bookingId, newStatus) => {
-  if (!window.confirm(`Are you sure you want to ${newStatus.toLowerCase()} this booking?`)) {
-    return;
-  }
+  // ─────────────────────────────────────────────────────────────────────────
+  // Accept/Reject Booking Action
+  // ─────────────────────────────────────────────────────────────────────────
+  const handleBookingAction = async (bookingId, newStatus) => {
+    if (!bookingId) return toast.warning('Invalid booking');
 
-  try {
-    // Explicitly create payload object
-    const payload = { status: newStatus };
+    if (!window.confirm(`Are you sure you want to ${newStatus.toLowerCase()} this booking?`)) {
+      return;
+    }
 
-    console.log('Sending to:', `/bookings/${bookingId}/status`, payload); // Debug log
+    setActionLoading(true);
 
-    const response = await api.put(`/bookings/${bookingId}/status`, payload);
+    try {
+      const payload = { status: newStatus };
+      await api.put(`/bookings/${bookingId}/status`, payload);
 
-    console.log('Response:', response.data); // Debug log
+      setBookings((prev) =>
+        prev.map((b) => (b._id === bookingId ? { ...b, status: newStatus } : b))
+      );
 
-    toast.success(`Booking ${newStatus.toLowerCase()} successfully!`);
+      toast.success(`Booking ${newStatus.toLowerCase()} successfully!`);
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to update booking status');
+      console.error('Booking action error:', err);
+    } finally {
+      setActionLoading(false);
+    }
+  };
 
-    // Update UI
-    setBookings(prev =>
-      prev.map(b => (b._id === bookingId ? { ...b, status: newStatus } : b))
-    );
-  } catch (err) {
-    console.error('Booking action error:', err);
-    const errorMsg = err.response?.data?.message || 'Failed to update booking status';
-    toast.error(errorMsg);
-  }
-};
-
+  // ─────────────────────────────────────────────────────────────────────────
+  // Toggle Facility Checkbox
+  // ─────────────────────────────────────────────────────────────────────────
   const toggleFacility = (facility, isEdit = false) => {
     const setter = isEdit ? setEditHostel : setNewHostel;
-    setter(prev => ({
+    setter((prev) => ({
       ...prev,
       facilities: prev.facilities.includes(facility)
-        ? prev.facilities.filter(f => f !== facility)
-        : [...prev.facilities, facility]
+        ? prev.facilities.filter((f) => f !== facility)
+        : [...prev.facilities, facility],
     }));
   };
 
+  // ─────────────────────────────────────────────────────────────────────────
+  // Handle Image Upload
+  // ─────────────────────────────────────────────────────────────────────────
   const handleImageChange = (e, isEdit = false) => {
+    const files = Array.from(e.target.files);
+    if (files.length > 6) {
+      toast.warning('Maximum 6 images allowed');
+      return;
+    }
     const setter = isEdit ? setEditHostel : setNewHostel;
-    setter(prev => ({
+    setter((prev) => ({
       ...prev,
-      images: Array.from(e.target.files)
+      images: files,
     }));
   };
 
-  // Delete hostel
+  // ─────────────────────────────────────────────────────────────────────────
+  // Delete Hostel Confirmation
+  // ─────────────────────────────────────────────────────────────────────────
   const confirmDeleteHostel = async () => {
+    if (!deleteHostelId) return;
+
     try {
       await api.delete(`/hostels/${deleteHostelId}`);
       toast.success('Hostel deleted successfully');
-      setHostels(prev => prev.filter(h => h._id !== deleteHostelId));
+      setHostels((prev) => prev.filter((h) => h._id !== deleteHostelId));
       setSelectedHostel(hostels[0] || null);
       setShowDeleteModal(false);
     } catch (err) {
       toast.error('Failed to delete hostel');
+      console.error('Delete hostel error:', err);
     }
   };
 
+  // ─────────────────────────────────────────────────────────────────────────
+  // Edit Hostel Modal Logic
+  // ─────────────────────────────────────────────────────────────────────────
+  const handleEditHostel = async () => {
+    setPublishLoading(true);
+    try {
+      const formData = new FormData();
+      formData.append('name', editHostel.name.trim());
+      formData.append('location', editHostel.location.trim());
+      formData.append('type', editHostel.type);
+      formData.append('price', editHostel.price);
+      formData.append('facilities', JSON.stringify(editHostel.facilities));
+      editHostel.images.forEach((file) => formData.append('images', file));
+
+      const res = await api.put(`/hostels/${editHostel._id}`, formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+
+      toast.success('Hostel updated successfully');
+      setHostels((prev) => prev.map((h) => (h._id === res.data._id ? res.data : h)));
+      setSelectedHostel(res.data);
+      setRooms(Array.isArray(res.data.rooms) ? res.data.rooms : []);
+      setShowEditModal(false);
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to update hostel');
+    } finally {
+      setPublishLoading(false);
+    }
+  };
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Render
+  // ─────────────────────────────────────────────────────────────────────────
   if (loading) {
     return (
-      <div className="d-flex justify-content-center align-items-center min-vh-100">
+      <section className="py-5 min-vh-100 d-flex align-items-center justify-content-center">
         <Spinner animation="border" variant="primary" />
-        <h4 className="ms-4">Loading your dashboard...</h4>
-      </div>
+        <h4 className="ms-3">Loading your dashboard...</h4>
+      </section>
     );
   }
 
@@ -326,45 +426,62 @@ function OwnerDashboard({ triggerToast }) {
     <section className="owner-dashboard py-5 bg-light min-vh-100">
       <Container fluid>
         <Row>
-          {/* Left Sidebar */}
+          {/* ─── Sidebar ────────────────────────────────────────────────────── */}
           <Col lg={3} md={4} className="mb-5">
             <Card className="shadow-lg border-0 sticky-top" style={{ top: '20px' }}>
               <Card.Body className="p-4">
                 <div className="text-center mb-5">
-                  <div className="bg-primary text-white rounded-circle d-flex align-items-center justify-content-center mx-auto mb-3" style={{ width: '90px', height: '90px' }}>
+                  <div
+                    className="bg-primary text-white rounded-circle d-flex align-items-center justify-content-center mx-auto mb-3"
+                    style={{ width: '90px', height: '90px' }}
+                  >
                     <i className="bi bi-building fs-1"></i>
                   </div>
-                  <h4 className="fw-bold text-primary">Hostel Owner Panel</h4>
-                  <p className="text-muted small">Managing {hostels.length} hostel{hostels.length !== 1 ? 's' : ''}</p>
+                  <h4 className="fw-bold text-primary">Owner Dashboard</h4>
+                  <p className="text-muted small">
+                    Managing <strong>{hostels.length}</strong> hostel{hostels.length !== 1 ? 's' : ''}
+                  </p>
                 </div>
 
-                <Dropdown className="mb-4">
+                {/* Hostel Selector Dropdown */}
+                <Dropdown className="mb-5">
                   <Dropdown.Toggle variant="outline-primary" className="w-100 text-start py-3">
-                    {selectedHostel ? selectedHostel.name : 'Select Hostel to Manage'}
+                    {selectedHostel ? selectedHostel.name : 'Select a Hostel'}
                   </Dropdown.Toggle>
                   <Dropdown.Menu className="w-100">
-                    {hostels.map(h => (
-                      <Dropdown.Item key={h._id} onClick={() => handleSelectHostel(h)}>
-                        {h.name} • {h.availableSeats || 0} seats left
-                      </Dropdown.Item>
-                    ))}
-                    {hostels.length === 0 && <Dropdown.Item disabled>No hostels yet</Dropdown.Item>}
+                    {hostels.length === 0 ? (
+                      <Dropdown.Item disabled>No hostels added yet</Dropdown.Item>
+                    ) : (
+                      hostels.map((h) => (
+                        <Dropdown.Item key={h._id} onClick={() => handleSelectHostel(h)}>
+                          <div className="fw-medium">{h.name}</div>
+                          <small className="text-muted d-block">
+                            {h.availableSeats || 0} seats available
+                          </small>
+                        </Dropdown.Item>
+                      ))
+                    )}
                   </Dropdown.Menu>
                 </Dropdown>
 
+                {/* Tab Navigation */}
                 <div className="d-grid gap-3">
                   {[
                     { key: 'add', icon: 'bi-plus-circle', label: 'Add New Hostel', variant: 'outline-success' },
-                    { key: 'manage', icon: 'bi-grid-3x3-gap', label: 'Manage Seats & Rooms', variant: 'outline-primary' },
-                    { key: 'bookings', icon: 'bi-calendar-check', label: `Bookings (${pendingBookingsCount} pending)`, variant: 'outline-warning' },
-                    { key: 'reviews', icon: 'bi-star', label: `Reviews (${reviews.length})`, variant: 'outline-info' }
-                  ].map(item => (
+                    { key: 'manage', icon: 'bi-grid-3x3-gap', label: 'Seat Management', variant: 'outline-primary' },
+                    {
+                      key: 'bookings',
+                      icon: 'bi-calendar-check',
+                      label: `Bookings (${pendingBookingsCount} pending)`,
+                      variant: 'outline-warning',
+                    },
+                    { key: 'reviews', icon: 'bi-star-fill', label: `Reviews (${reviews.length})`, variant: 'outline-info' },
+                  ].map((item) => (
                     <Button
                       key={item.key}
-                      variant={item.variant}
+                      variant={activeTab === item.key ? 'primary' : item.variant}
                       className="d-flex align-items-center justify-content-start py-3 rounded-pill fw-medium"
                       onClick={() => setActiveTab(item.key)}
-                      active={activeTab === item.key}
                     >
                       <i className={`bi ${item.icon} fs-4 me-3`}></i>
                       {item.label}
@@ -375,16 +492,16 @@ function OwnerDashboard({ triggerToast }) {
             </Card>
           </Col>
 
-          {/* Main Content Area */}
+          {/* ─── Main Content ──────────────────────────────────────────────────── */}
           <Col lg={9} md={8}>
             <Card className="shadow-lg border-0">
               <Card.Body className="p-5">
-                {/* Header with title & actions */}
+                {/* Header */}
                 <div className="d-flex justify-content-between align-items-center mb-5 pb-3 border-bottom">
                   <h3 className="fw-bold text-primary mb-0">
                     {activeTab === 'add' && 'Add New Hostel'}
-                    {activeTab === 'manage' && 'Seat & Room Management'}
-                    {activeTab === 'bookings' && 'Booking Requests'}
+                    {activeTab === 'manage' && (selectedHostel ? `Managing: ${selectedHostel.name}` : 'Select a Hostel to Manage')}
+                    {activeTab === 'bookings' && 'All Booking Requests'}
                     {activeTab === 'reviews' && 'Student Reviews'}
                   </h3>
 
@@ -392,6 +509,7 @@ function OwnerDashboard({ triggerToast }) {
                     <div className="d-flex gap-3">
                       <Button
                         variant="outline-primary"
+                        size="sm"
                         onClick={() => {
                           setEditHostel({ ...selectedHostel, images: [] });
                           setShowEditModal(true);
@@ -401,6 +519,7 @@ function OwnerDashboard({ triggerToast }) {
                       </Button>
                       <Button
                         variant="outline-danger"
+                        size="sm"
                         onClick={() => {
                           setDeleteHostelId(selectedHostel._id);
                           setShowDeleteModal(true);
@@ -412,28 +531,28 @@ function OwnerDashboard({ triggerToast }) {
                   )}
                 </div>
 
-                {/* Add New Hostel Tab */}
+                {/* ─── Add New Hostel Tab ──────────────────────────────────────── */}
                 {activeTab === 'add' && (
                   <Form onSubmit={handlePublishHostel}>
                     <Row className="g-4 mb-5">
                       <Col md={6}>
                         <Form.Group>
-                          <Form.Label className="fw-bold">Hostel Name</Form.Label>
+                          <Form.Label className="fw-bold">Hostel Name *</Form.Label>
                           <Form.Control
-                            placeholder="Enter hostel name"
+                            placeholder="e.g. Sunshine Boys Hostel"
                             value={newHostel.name}
-                            onChange={e => setNewHostel({ ...newHostel, name: e.target.value })}
+                            onChange={(e) => setNewHostel({ ...newHostel, name: e.target.value })}
                             required
                           />
                         </Form.Group>
                       </Col>
                       <Col md={6}>
                         <Form.Group>
-                          <Form.Label className="fw-bold">Location</Form.Label>
+                          <Form.Label className="fw-bold">Location *</Form.Label>
                           <Form.Control
-                            placeholder="City / Area"
+                            placeholder="e.g. Benz Circle, Vijayawada"
                             value={newHostel.location}
-                            onChange={e => setNewHostel({ ...newHostel, location: e.target.value })}
+                            onChange={(e) => setNewHostel({ ...newHostel, location: e.target.value })}
                             required
                           />
                         </Form.Group>
@@ -443,7 +562,7 @@ function OwnerDashboard({ triggerToast }) {
                           <Form.Label className="fw-bold">Hostel Type</Form.Label>
                           <Form.Select
                             value={newHostel.type}
-                            onChange={e => setNewHostel({ ...newHostel, type: e.target.value })}
+                            onChange={(e) => setNewHostel({ ...newHostel, type: e.target.value })}
                           >
                             <option>Boys Hostel</option>
                             <option>Girls Hostel</option>
@@ -452,23 +571,22 @@ function OwnerDashboard({ triggerToast }) {
                       </Col>
                       <Col md={6}>
                         <Form.Group>
-                          <Form.Label className="fw-bold">Price per Seat (₹/month)</Form.Label>
+                          <Form.Label className="fw-bold">Price per Seat (₹/month) *</Form.Label>
                           <Form.Control
                             type="number"
-                            placeholder="e.g. 5500"
+                            placeholder="5500"
                             value={newHostel.price}
-                            onChange={e => setNewHostel({ ...newHostel, price: e.target.value })}
+                            onChange={(e) => setNewHostel({ ...newHostel, price: e.target.value })}
                             required
                           />
                         </Form.Group>
                       </Col>
                     </Row>
 
-                    {/* Facilities */}
                     <Form.Group className="mb-5">
                       <Form.Label className="fw-bold">Available Facilities</Form.Label>
                       <Row className="g-3">
-                        {facilitiesOptions.map(facility => (
+                        {facilitiesOptions.map((facility) => (
                           <Col md={4} key={facility}>
                             <Form.Check
                               type="checkbox"
@@ -482,30 +600,31 @@ function OwnerDashboard({ triggerToast }) {
                       </Row>
                     </Form.Group>
 
-                    {/* Room Types Input */}
                     <Form.Group className="mb-5">
-                      <h5 className="fw-bold mb-4 text-primary">Room Types & Pricing</h5>
+                      <h5 className="fw-bold text-primary mb-4">Room Types & Pricing</h5>
                       <Row className="g-4">
                         {[
                           { key: 'single', label: 'Single Room', seats: 1 },
                           { key: 'double', label: '2-Sharing (Double)', seats: 2 },
                           { key: 'triple', label: '3-Sharing', seats: 3 },
-                          { key: 'five', label: '5-Sharing', seats: 5 }
-                        ].map(item => (
+                          { key: 'five', label: '5-Sharing', seats: 5 },
+                        ].map((item) => (
                           <Col md={6} key={item.key}>
-                            <Card className="border-primary">
+                            <Card className="border-primary h-100">
                               <Card.Body>
                                 <Card.Title className="text-primary">{item.label}</Card.Title>
-                                <Row className="g-3 mt-2">
+                                <Row className="g-3 mt-3">
                                   <Col xs={6}>
                                     <Form.Control
                                       type="number"
-                                      placeholder="Number of Rooms"
+                                      placeholder="No. of Rooms"
                                       value={roomTypesInput[item.key].count}
-                                      onChange={e => setRoomTypesInput({
-                                        ...roomTypesInput,
-                                        [item.key]: { ...roomTypesInput[item.key], count: e.target.value }
-                                      })}
+                                      onChange={(e) =>
+                                        setRoomTypesInput((prev) => ({
+                                          ...prev,
+                                          [item.key]: { ...prev[item.key], count: e.target.value },
+                                        }))
+                                      }
                                       min="0"
                                     />
                                   </Col>
@@ -514,10 +633,12 @@ function OwnerDashboard({ triggerToast }) {
                                       type="number"
                                       placeholder="Price / Seat"
                                       value={roomTypesInput[item.key].price}
-                                      onChange={e => setRoomTypesInput({
-                                        ...roomTypesInput,
-                                        [item.key]: { ...roomTypesInput[item.key], price: e.target.value }
-                                      })}
+                                      onChange={(e) =>
+                                        setRoomTypesInput((prev) => ({
+                                          ...prev,
+                                          [item.key]: { ...prev[item.key], price: e.target.value },
+                                        }))
+                                      }
                                       min="0"
                                     />
                                   </Col>
@@ -529,17 +650,16 @@ function OwnerDashboard({ triggerToast }) {
                       </Row>
                     </Form.Group>
 
-                    {/* Image Upload */}
                     <Form.Group className="mb-5">
-                      <Form.Label className="fw-bold">Upload Hostel Images (max 6)</Form.Label>
+                      <Form.Label className="fw-bold">Upload Images (max 6)</Form.Label>
                       <Form.Control
                         type="file"
                         multiple
                         accept="image/*"
-                        onChange={e => handleImageChange(e)}
+                        onChange={handleImageChange}
                       />
                       <Form.Text className="text-muted">
-                        Recommended size: 1200×800 pixels or larger
+                        High-quality images recommended (1200×800 or larger)
                       </Form.Text>
                     </Form.Group>
 
@@ -556,53 +676,56 @@ function OwnerDashboard({ triggerToast }) {
                           Publishing Hostel...
                         </>
                       ) : (
-                        'Publish Hostel'
+                        'Publish New Hostel'
                       )}
                     </Button>
                   </Form>
                 )}
 
-                {/* Seat Management Tab */}
+                {/* ─── Manage Seats Tab ────────────────────────────────────────── */}
                 {activeTab === 'manage' && selectedHostel && (
                   <div>
                     <Row className="g-4 mb-5">
                       <Col md={3}>
-                        <Card className="text-center border-primary">
+                        <Card className="text-center bg-primary text-white shadow">
                           <Card.Body>
-                            <h6 className="text-muted">Total Seats</h6>
-                            <h3 className="fw-bold text-primary">{totalSeats}</h3>
+                            <h6 className="text-white-50 mb-2">Total Seats</h6>
+                            <h3 className="fw-bold">{seatStats.totalSeats}</h3>
                           </Card.Body>
                         </Card>
                       </Col>
                       <Col md={3}>
-                        <Card className="text-center border-success">
+                        <Card className="text-center bg-success text-white shadow">
                           <Card.Body>
-                            <h6 className="text-muted">Available Seats</h6>
-                            <h3 className="fw-bold text-success">{totalAvailable}</h3>
+                            <h6 className="text-white-50 mb-2">Available Seats</h6>
+                            <h3 className="fw-bold">{seatStats.available}</h3>
                           </Card.Body>
                         </Card>
                       </Col>
                       <Col md={3}>
-                        <Card className="text-center border-warning">
+                        <Card className="text-center bg-warning text-dark shadow">
                           <Card.Body>
-                            <h6 className="text-muted">Occupied Seats</h6>
-                            <h3 className="fw-bold text-warning">{totalOccupied}</h3>
+                            <h6 className="text-dark mb-2">Occupied Seats</h6>
+                            <h3 className="fw-bold">{seatStats.occupied}</h3>
                           </Card.Body>
                         </Card>
                       </Col>
                       <Col md={3}>
-                        <Card className="text-center border-info">
+                        <Card className="text-center bg-info text-white shadow">
                           <Card.Body>
-                            <h6 className="text-muted">Occupancy Rate</h6>
-                            <h3 className="fw-bold text-info">
-                              {totalSeats > 0 ? Math.round((totalOccupied / totalSeats) * 100) : 0}%
+                            <h6 className="text-white-50 mb-2">Occupancy Rate</h6>
+                            <h3 className="fw-bold">
+                              {seatStats.totalSeats > 0
+                                ? Math.round((seatStats.occupied / seatStats.totalSeats) * 100)
+                                : 0}
+                              %
                             </h3>
                           </Card.Body>
                         </Card>
                       </Col>
                     </Row>
 
-                    <h5 className="fw-bold text-primary mb-4">Room Type Overview</h5>
+                    <h5 className="fw-bold text-primary mb-4">Room Type Breakdown</h5>
                     <Table striped bordered hover responsive className="mb-5">
                       <thead className="table-dark">
                         <tr>
@@ -615,17 +738,28 @@ function OwnerDashboard({ triggerToast }) {
                         </tr>
                       </thead>
                       <tbody>
-                        {Object.values(aggregatedRooms).length === 0 ? (
+                        {Object.keys(aggregatedRooms).length === 0 ? (
                           <tr>
-                            <td colSpan="6" className="text-center py-4">No rooms configured yet</td>
+                            <td colSpan="6" className="text-center py-4 text-muted">
+                              No rooms configured yet
+                            </td>
                           </tr>
                         ) : (
-                          Object.values(aggregatedRooms).map((agg, idx) => (
-                            <tr key={idx}>
+                          Object.values(aggregatedRooms).map((agg) => (
+                            <tr key={agg.type}>
                               <td className="fw-medium">{agg.type}</td>
                               <td>{agg.count}</td>
                               <td>{agg.totalSeats}</td>
-                              <td>{agg.occupied}</td>
+                              <td>
+                                <Form.Control
+                                  type="number"
+                                  size="sm"
+                                  min="0"
+                                  max={agg.totalSeats}
+                                  value={agg.occupied}
+                                  onChange={(e) => handleOccupiedChange(agg.type, e.target.value)}
+                                />
+                              </td>
                               <td className={agg.available > 0 ? 'text-success fw-bold' : 'text-danger fw-bold'}>
                                 {agg.available}
                               </td>
@@ -635,69 +769,26 @@ function OwnerDashboard({ triggerToast }) {
                         )}
                       </tbody>
                     </Table>
-
-                    <Alert variant="info" className="mb-5">
-                      <strong>Note:</strong> You can update occupied count per room type below.
-                    </Alert>
-
-                    {/* Occupied Seats Controls */}
-                    <h5 className="fw-bold text-primary mb-4">Update Occupied Seats</h5>
-                    <Row className="g-4">
-                      {Object.keys(aggregatedRooms).map(type => {
-                        const agg = aggregatedRooms[type];
-                        return (
-                          <Col md={6} key={type}>
-                            <Card className="border-primary">
-                              <Card.Body>
-                                <Card.Title>{type}</Card.Title>
-                                <InputGroup className="mb-3">
-                                  <InputGroup.Text>Occupied Seats</InputGroup.Text>
-                                  <Form.Control
-                                    type="number"
-                                    min="0"
-                                    max={agg.totalSeats}
-                                    value={agg.occupied}
-                                    onChange={e => {
-                                      const val = parseInt(e.target.value) || 0;
-                                      updateOccupiedSeats(type, val);
-                                    }}
-                                  />
-                                  <InputGroup.Text>/ {agg.totalSeats}</InputGroup.Text>
-                                </InputGroup>
-                                <small className="text-muted">
-                                  Available: {agg.available} seats
-                                </small>
-                              </Card.Body>
-                            </Card>
-                          </Col>
-                        );
-                      })}
-                    </Row>
                   </div>
                 )}
 
-                {/* Bookings Tab */}
+                {/* ─── Bookings Tab ─────────────────────────────────────────────── */}
                 {activeTab === 'bookings' && (
                   <div>
                     <h5 className="fw-bold text-primary mb-4">
                       All Booking Requests ({bookings.length})
                       {pendingBookingsCount > 0 && (
-                        <Badge bg="warning" className="ms-3 fs-6">
+                        <Badge bg="warning" className="ms-3">
                           {pendingBookingsCount} Pending
                         </Badge>
                       )}
                     </h5>
 
-                    {bookings.length === 0 ? (
-                      <Alert variant="info" className="text-center p-5">
-                        No booking requests received yet.
-                      </Alert>
-                    ) : (
+                    {Array.isArray(bookings) && bookings.length > 0 ? (
                       <Table responsive hover bordered className="shadow-sm">
                         <thead className="table-dark">
                           <tr>
                             <th>Student</th>
-                            <th>Hostel</th>
                             <th>Room Type</th>
                             <th>Check-in Date</th>
                             <th>Price</th>
@@ -706,10 +797,9 @@ function OwnerDashboard({ triggerToast }) {
                           </tr>
                         </thead>
                         <tbody>
-                          {bookings.map(b => (
+                          {bookings.map((b) => (
                             <tr key={b._id}>
-                              <td>{b.user?.name || 'Anonymous'}</td>
-                              <td>{b.hostel?.name || '—'}</td>
+                              <td className="fw-medium">{b.user?.name || '—'}</td>
                               <td>{b.roomType}</td>
                               <td>{new Date(b.checkInDate).toLocaleDateString()}</td>
                               <td>₹{b.price?.toLocaleString() || '—'}</td>
@@ -718,9 +808,8 @@ function OwnerDashboard({ triggerToast }) {
                                   bg={
                                     b.status === 'Confirmed' ? 'success' :
                                     b.status === 'Rejected' ? 'danger' :
-                                    b.status === 'Pending' ? 'warning' : 'secondary'
+                                    'warning'
                                   }
-                                  className="fs-6 px-3 py-2"
                                 >
                                   {b.status}
                                 </Badge>
@@ -729,70 +818,72 @@ function OwnerDashboard({ triggerToast }) {
                                 {b.status === 'Pending' && (
                                   <div className="d-flex gap-2">
                                     <Button
-                                      variant="success"
                                       size="sm"
+                                      variant="success"
                                       onClick={() => handleBookingAction(b._id, 'Confirmed')}
                                       disabled={actionLoading}
                                     >
-                                      <i className="bi bi-check-lg me-1"></i>Approve
+                                      <i className="bi bi-check-lg me-1"></i> Approve
                                     </Button>
                                     <Button
-                                      variant="danger"
                                       size="sm"
+                                      variant="danger"
                                       onClick={() => handleBookingAction(b._id, 'Rejected')}
                                       disabled={actionLoading}
                                     >
-                                      <i className="bi bi-x-lg me-1"></i>Reject
+                                      <i className="bi bi-x-lg me-1"></i> Reject
                                     </Button>
                                   </div>
                                 )}
-
                                 {b.status !== 'Pending' && (
-                                  <span className="text-muted small fst-italic">Processed</span>
+                                  <span className="text-muted small">Processed</span>
                                 )}
                               </td>
                             </tr>
                           ))}
                         </tbody>
                       </Table>
+                    ) : (
+                      <Alert variant="info" className="text-center p-5">
+                        <i className="bi bi-inbox fs-1 mb-3 d-block"></i>
+                        No booking requests yet
+                      </Alert>
                     )}
                   </div>
                 )}
 
-                {/* Reviews Tab */}
+                {/* ─── Reviews Tab ─────────────────────────────────────────────── */}
                 {activeTab === 'reviews' && (
                   <div>
-                    <h5 className="fw-bold text-primary mb-4">
-                      Reviews & Ratings ({reviews.length})
-                    </h5>
-
-                    {reviews.length === 0 ? (
-                      <Alert variant="info" className="text-center p-5">
-                        No reviews received yet.
-                      </Alert>
-                    ) : (
+                    <h5 className="fw-bold text-primary mb-4">Student Reviews ({reviews.length})</h5>
+                    {Array.isArray(reviews) && reviews.length > 0 ? (
                       <Row className="g-4">
-                        {reviews.map(r => (
+                        {reviews.map((r) => (
                           <Col md={6} key={r._id}>
                             <Card className="shadow-sm h-100">
                               <Card.Body>
-                                <div className="d-flex justify-content-between align-items-start mb-3">
+                                <div className="d-flex justify-content-between mb-3">
                                   <div>
-                                    <h6 className="fw-bold mb-1">{r.user?.name || 'Anonymous Student'}</h6>
+                                    <h6 className="fw-bold mb-1">{r.user?.name || 'Anonymous'}</h6>
                                     <div className="text-warning">
-                                      {'★'.repeat(r.rating)}{'☆'.repeat(5 - r.rating)}
+                                      {'★'.repeat(r.rating || 0)}{'☆'.repeat(5 - (r.rating || 0))}
                                     </div>
                                   </div>
                                   <small className="text-muted">
                                     {new Date(r.createdAt).toLocaleDateString()}
                                   </small>
                                 </div>
-                                <p className="mb-0">{r.comment || 'No comment provided'}</p>
+                                <p className="mb-0">{r.comment || 'No comment'}</p>
                               </Card.Body>
                             </Card>
                           </Col>
                         ))}
                       </Row>
+                    ) : (
+                      <Alert variant="info" className="text-center p-5">
+                        <i className="bi bi-star fs-1 mb-3 d-block"></i>
+                        No reviews yet
+                      </Alert>
                     )}
                   </div>
                 )}
@@ -802,26 +893,26 @@ function OwnerDashboard({ triggerToast }) {
         </Row>
       </Container>
 
-      {/* Delete Confirmation Modal */}
+      {/* ─── Delete Confirmation Modal ──────────────────────────────────────── */}
       <Modal show={showDeleteModal} onHide={() => setShowDeleteModal(false)} centered>
         <Modal.Header closeButton>
           <Modal.Title className="text-danger">Delete Hostel</Modal.Title>
         </Modal.Header>
         <Modal.Body>
-          Are you sure you want to delete <strong>{selectedHostel?.name}</strong>?<br />
-          <small className="text-muted">This action cannot be undone.</small>
+          <p>Are you sure you want to delete <strong>{selectedHostel?.name}</strong>?</p>
+          <p className="text-muted small">This action cannot be undone.</p>
         </Modal.Body>
         <Modal.Footer>
           <Button variant="secondary" onClick={() => setShowDeleteModal(false)}>
             Cancel
           </Button>
           <Button variant="danger" onClick={confirmDeleteHostel}>
-            Yes, Delete Hostel
+            Delete Hostel
           </Button>
         </Modal.Footer>
       </Modal>
 
-      {/* Edit Hostel Modal */}
+      {/* ─── Edit Hostel Modal ──────────────────────────────────────────────── */}
       <Modal show={showEditModal} onHide={() => setShowEditModal(false)} size="lg">
         <Modal.Header closeButton>
           <Modal.Title>Edit Hostel Details</Modal.Title>
@@ -834,24 +925,24 @@ function OwnerDashboard({ triggerToast }) {
                   <Form.Label className="fw-bold">Hostel Name</Form.Label>
                   <Form.Control
                     value={editHostel.name}
-                    onChange={e => setEditHostel({ ...editHostel, name: e.target.value })}
+                    onChange={(e) => setEditHostel({ ...editHostel, name: e.target.value })}
                   />
                 </Col>
                 <Col md={6}>
                   <Form.Label className="fw-bold">Location</Form.Label>
                   <Form.Control
                     value={editHostel.location}
-                    onChange={e => setEditHostel({ ...editHostel, location: e.target.value })}
+                    onChange={(e) => setEditHostel({ ...editHostel, location: e.target.value })}
                   />
                 </Col>
               </Row>
 
               <Row className="g-3 mb-4">
                 <Col md={6}>
-                  <Form.Label className="fw-bold">Hostel Type</Form.Label>
+                  <Form.Label className="fw-bold">Type</Form.Label>
                   <Form.Select
                     value={editHostel.type}
-                    onChange={e => setEditHostel({ ...editHostel, type: e.target.value })}
+                    onChange={(e) => setEditHostel({ ...editHostel, type: e.target.value })}
                   >
                     <option>Boys Hostel</option>
                     <option>Girls Hostel</option>
@@ -862,7 +953,7 @@ function OwnerDashboard({ triggerToast }) {
                   <Form.Control
                     type="number"
                     value={editHostel.price}
-                    onChange={e => setEditHostel({ ...editHostel, price: e.target.value })}
+                    onChange={(e) => setEditHostel({ ...editHostel, price: e.target.value })}
                   />
                 </Col>
               </Row>
@@ -870,7 +961,7 @@ function OwnerDashboard({ triggerToast }) {
               <Form.Group className="mb-4">
                 <Form.Label className="fw-bold">Facilities</Form.Label>
                 <Row className="g-3">
-                  {facilitiesOptions.map(f => (
+                  {facilitiesOptions.map((f) => (
                     <Col md={4} key={f}>
                       <Form.Check
                         type="checkbox"
@@ -889,7 +980,7 @@ function OwnerDashboard({ triggerToast }) {
                   type="file"
                   multiple
                   accept="image/*"
-                  onChange={e => handleImageChange(e, true)}
+                  onChange={(e) => handleImageChange(e, true)}
                 />
               </Form.Group>
             </Form>
@@ -905,21 +996,21 @@ function OwnerDashboard({ triggerToast }) {
               setPublishLoading(true);
               try {
                 const formData = new FormData();
-                formData.append('name', editHostel.name);
-                formData.append('location', editHostel.location);
+                formData.append('name', editHostel.name.trim());
+                formData.append('location', editHostel.location.trim());
                 formData.append('type', editHostel.type);
                 formData.append('price', editHostel.price);
                 formData.append('facilities', JSON.stringify(editHostel.facilities));
-                editHostel.images.forEach(file => formData.append('images', file));
+                editHostel.images.forEach((file) => formData.append('images', file));
 
                 const res = await api.put(`/hostels/${editHostel._id}`, formData, {
-                  headers: { 'Content-Type': 'multipart/form-data' }
+                  headers: { 'Content-Type': 'multipart/form-data' },
                 });
 
                 toast.success('Hostel updated successfully');
-                setHostels(prev => prev.map(h => h._id === res.data._id ? res.data : h));
+                setHostels((prev) => prev.map((h) => (h._id === res.data._id ? res.data : h)));
                 setSelectedHostel(res.data);
-                setRooms(res.data.rooms || []);
+                setRooms(Array.isArray(res.data.rooms) ? res.data.rooms : []);
                 setShowEditModal(false);
               } catch (err) {
                 toast.error('Failed to update hostel');
@@ -929,14 +1020,7 @@ function OwnerDashboard({ triggerToast }) {
             }}
             disabled={publishLoading}
           >
-            {publishLoading ? (
-              <>
-                <Spinner size="sm" className="me-2" />
-                Saving...
-              </>
-            ) : (
-              'Save Changes'
-            )}
+            {publishLoading ? 'Saving...' : 'Save Changes'}
           </Button>
         </Modal.Footer>
       </Modal>
