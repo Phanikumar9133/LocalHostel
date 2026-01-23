@@ -1,6 +1,8 @@
 // src/App.jsx
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { useState, useEffect } from 'react';
+
+// Components & Pages
 import Navbar from './components/Navbar';
 import Footer from './components/Footer';
 import Home from './pages/Home';
@@ -12,6 +14,8 @@ import Login from './pages/Login';
 import Register from './pages/Register';
 import OwnerDashboard from './pages/OwnerDashboard';
 import Profile from './pages/Profile';
+import AdminLogin from './components/AdminLogin';
+import AdminDashboard from './pages/AdminDashboard';  // ← FIXED: Import added
 import ToastNotification from './components/ToastNotification';
 
 function App() {
@@ -20,22 +24,27 @@ function App() {
   const [showToast, setShowToast] = useState(false);
   const [toastMessage, setToastMessage] = useState('');
 
-  // Check login status on app load
+  // Check login status on mount
   useEffect(() => {
     const token = localStorage.getItem('token');
     const user = localStorage.getItem('user');
 
     if (token && user) {
-      const parsedUser = JSON.parse(user);
-      setIsLoggedIn(true);
-      setUserRole(parsedUser.role);
+      try {
+        const parsedUser = JSON.parse(user);
+        setIsLoggedIn(true);
+        setUserRole(parsedUser.role);
+      } catch (err) {
+        console.error('Invalid user data in localStorage', err);
+        localStorage.clear();
+      }
     }
   }, []);
 
   const handleLogin = (role) => {
     setIsLoggedIn(true);
     setUserRole(role);
-    triggerToast(`Welcome back! Logged in as ${role === 'owner' ? 'Hostel Owner' : 'Student'}`);
+    triggerToast(`Welcome back! Logged in as ${role === 'owner' ? 'Hostel Owner' : role === 'admin' ? 'Administrator' : 'Student'}`);
   };
 
   const handleLogout = () => {
@@ -101,7 +110,25 @@ function App() {
           } 
         />
 
-        {/* Catch-all redirect */}
+        {/* Admin Routes */}
+        <Route 
+          path="/admin-login" 
+          element={
+            isLoggedIn && userRole === 'admin' 
+              ? <Navigate to="/admin-dashboard" replace /> 
+              : <AdminLogin handleLogin={handleLogin} />
+          } 
+        />
+        <Route 
+          path="/admin-dashboard" 
+          element={
+            isLoggedIn && userRole === 'admin' 
+              ? <AdminDashboard triggerToast={triggerToast} handleLogout={handleLogout} />
+              : <Navigate to="/admin-login" replace />
+          } 
+        />
+
+        {/* Catch-all */}
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
 

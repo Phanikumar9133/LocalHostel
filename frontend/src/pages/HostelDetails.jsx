@@ -1,12 +1,22 @@
 // src/pages/HostelDetails.jsx
 import { useParams, useNavigate } from 'react-router-dom';
-import { Carousel, Container, Row, Col, Badge, Button, Card, Modal, Form, Alert, Spinner, Table } from 'react-bootstrap';
+import {
+  Carousel,
+  Container,
+  Row,
+  Col,
+  Badge,
+  Button,
+  Card,
+  Modal,
+  Form,
+  Alert,
+  Spinner,
+  Table
+} from 'react-bootstrap';
 import { useState, useEffect } from 'react';
 import api from '../services/api';
 import { toast } from 'react-toastify';
-
-// Backend base URL (change if needed)
-const API_BASE_URL = 'https://localhostel.onrender.com';
 
 function HostelDetails({ triggerToast, isLoggedIn }) {
   const { id } = useParams();
@@ -17,37 +27,46 @@ function HostelDetails({ triggerToast, isLoggedIn }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
+  // Booking modal states
   const [showBookingModal, setShowBookingModal] = useState(false);
   const [selectedRoomType, setSelectedRoomType] = useState('');
   const [checkInDate, setCheckInDate] = useState('');
+  const [bookingLoading, setBookingLoading] = useState(false);
+
+  // Review form states
   const [showReviewForm, setShowReviewForm] = useState(false);
   const [reviewRating, setReviewRating] = useState(5);
   const [reviewComment, setReviewComment] = useState('');
-  const [bookingLoading, setBookingLoading] = useState(false);
 
   useEffect(() => {
-    const fetchHostelData = async () => {
+    const fetchData = async () => {
       try {
         setLoading(true);
-        const hostelRes = await api.get(`/hostels/${id}`);
+        const [hostelRes, reviewsRes] = await Promise.all([
+          api.get(`/hostels/${id}`),
+          api.get(`/reviews/${id}`)
+        ]);
+
         setHostel(hostelRes.data);
+        setReviews(reviewsRes.data || []);
 
-        const reviewsRes = await api.get(`/reviews/${id}`);
-        setReviews(reviewsRes.data);
-
-        const firstAvailableRoom = hostelRes.data.rooms?.find(r => r.totalSeats > r.occupied);
-        if (firstAvailableRoom) {
-          setSelectedRoomType(firstAvailableRoom.type.toLowerCase().replace('-sharing', ''));
+        // Auto-select first available room type
+        const firstAvailable = hostelRes.data.rooms?.find(
+          r => (r.totalSeats || 0) > (r.occupied || 0)
+        );
+        if (firstAvailable) {
+          setSelectedRoomType(firstAvailable.type);
         }
       } catch (err) {
-        setError(err.response?.data?.message || 'Failed to load hostel details');
-        toast.error('Failed to load hostel details');
+        const msg = err.response?.data?.message || 'Failed to load hostel details';
+        setError(msg);
+        toast.error(msg);
       } finally {
         setLoading(false);
       }
     };
 
-    fetchHostelData();
+    fetchData();
   }, [id]);
 
   const facilitiesWithIcons = {
@@ -65,48 +84,56 @@ function HostelDetails({ triggerToast, isLoggedIn }) {
 
   const handleBookNow = () => {
     if (!isLoggedIn) {
-      triggerToast('Please login to book a seat!');
+      toast.warning('Please login to book a seat');
       navigate('/login');
       return;
     }
-    if (hostel?.availableSeats === 0) {
-      triggerToast('Sorry, this hostel is fully booked!');
+    if ((hostel?.availableSeats || 0) <= 0) {
+      toast.error('Sorry, no seats available right now');
       return;
     }
     setShowBookingModal(true);
   };
 
   const confirmBooking = async () => {
-    if (!checkInDate) {
-      toast.error('Please select a check-in date!');
-      return;
-    }
+    // Validation
     if (!selectedRoomType) {
-      toast.error('Please select a room type!');
-      return;
+      return toast.error('Please select a room type');
+    }
+    if (!checkInDate) {
+      return toast.error('Please select a check-in date');
     }
 
     setBookingLoading(true);
 
     try {
-      const selectedRoom = hostel.rooms?.find(r => r.type.toLowerCase().includes(selectedRoomType));
-      if (!selectedRoom || selectedRoom.totalSeats - selectedRoom.occupied <= 0) {
-        toast.error('Selected room type not available');
-        return;
+      // Find the room object to get its price (backend may require it)
+      const selectedRoom = hostel.rooms?.find(r => r.type === selectedRoomType);
+      if (!selectedRoom) {
+        throw new Error('Selected room type not found');
       }
 
-      await api.post('/bookings', {
+      const payload = {
         hostel: id,
-        roomType: selectedRoom.type,
+        roomType: selectedRoomType,
         checkInDate,
-        price: selectedRoom.price,
-      });
+        price: selectedRoom.price  // ← important: backend expects price
+      };
 
+      console.log('Sending booking payload:', payload); // ← debug log
+
+      const response = await api.post('/bookings', payload);
+
+      console.log('Booking response:', response.data); // ← debug log
+
+      toast.success('Booking request sent successfully! Owner will review it soon.');
       setShowBookingModal(false);
       setCheckInDate('');
-      toast.success('Booking confirmed! Check your profile.');
+      setSelectedRoomType('');
     } catch (err) {
-      toast.error(err.response?.data?.message || 'Booking failed');
+      console.error('Booking error:', err);
+      const errorMsg = err.response?.data?.message || 'Failed to create booking. Please try again.';
+      toast.error(errorMsg);
     } finally {
       setBookingLoading(false);
     }
@@ -118,13 +145,17 @@ function HostelDetails({ triggerToast, isLoggedIn }) {
       navigate('/login');
       return;
     }
+    if (!reviewComment.trim()) {
+      return toast.warning('Review comment cannot be empty');
+    }
 
     try {
       const res = await api.post('/reviews', {
-        hostel: id,
+        hostelId: id,  // backend expects hostelId (not hostel)
         rating: reviewRating,
-        comment: reviewComment,
+        comment: reviewComment.trim()
       });
+
       setReviews([...reviews, res.data]);
       setReviewComment('');
       setShowReviewForm(false);
@@ -136,219 +167,308 @@ function HostelDetails({ triggerToast, isLoggedIn }) {
 
   if (loading) {
     return (
-      <section className="py-5 text-center min-vh-100 d-flex align-items-center justify-content-center">
-        <Spinner animation="border" variant="primary" />
-        <h4 className="ms-3">Loading hostel details...</h4>
-      </section>
+      <div className="d-flex justify-content-center align-items-center min-vh-100">
+        <Spinner animation="border" variant="primary" style={{ width: '4rem', height: '4rem' }} />
+      </div>
     );
   }
 
   if (error || !hostel) {
     return (
-      <section className="py-5 text-center bg-light min-vh-100 d-flex align-items-center">
-        <Container>
-          <Card className="p-5 shadow">
-            <h2 className="text-danger">Hostel Not Found</h2>
-            <p>{error || "We couldn't find the hostel you're looking for."}</p>
-            <Button variant="primary" onClick={() => navigate('/hostels')}>
-              Back to Hostels
-            </Button>
-          </Card>
-        </Container>
-      </section>
+      <Container className="py-5">
+        <Alert variant="danger" className="text-center p-5 shadow">
+          <h3>{error || "Hostel not found"}</h3>
+          <Button variant="primary" size="lg" className="mt-3" onClick={() => navigate('/hostels')}>
+            Back to Hostels
+          </Button>
+        </Alert>
+      </Container>
     );
   }
+
+  // Aggregate room types for display
+  const roomSummary = {};
+  (hostel.rooms || []).forEach(r => {
+    if (!roomSummary[r.type]) {
+      roomSummary[r.type] = {
+        type: r.type,
+        totalSeats: 0,
+        occupied: 0,
+        available: 0,
+        price: r.price
+      };
+    }
+    roomSummary[r.type].totalSeats += r.totalSeats || 0;
+    roomSummary[r.type].occupied += r.occupied || 0;
+    roomSummary[r.type].available += (r.totalSeats || 0) - (r.occupied || 0);
+  });
+
+  const availableRoomTypes = Object.values(roomSummary).filter(r => r.available > 0);
 
   return (
     <section className="hostel-details py-5 bg-light min-vh-100">
       <Container>
-        {error && <Alert variant="danger">{error}</Alert>}
-
-        <Row>
-          {/* Image Carousel */}
-          <Col lg={8} className="mb-5">
-            <Carousel className="shadow-lg rounded-4 overflow-hidden">
-              {(hostel.images || []).length === 0 ? (
-                <Carousel.Item>
-                  <img
-                    src="https://via.placeholder.com/800x500?text=No+Image+Available"
-                    className="d-block w-100"
-                    alt="No image"
-                    style={{ height: '500px', objectFit: 'cover' }}
-                  />
-                </Carousel.Item>
-              ) : (
+        <Row className="g-5">
+          {/* Images + Details */}
+          <Col lg={8}>
+            <Carousel className="rounded-4 shadow-lg overflow-hidden mb-5">
+              {(hostel.images?.length || 0) > 0 ? (
                 hostel.images.map((img, idx) => (
                   <Carousel.Item key={idx}>
                     <img
-                      src={`${API_BASE_URL}${img}`} // Add base URL to relative paths
+                      src={img}
                       className="d-block w-100"
-                      alt={`${hostel.name} - Image ${idx + 1}`}
-                      style={{ height: '500px', objectFit: 'cover' }}
-                      onError={(e) => e.target.src = 'https://via.placeholder.com/800x500?text=Image+Not+Found'}
+                      alt={`Hostel image ${idx + 1}`}
+                      style={{ height: '520px', objectFit: 'cover' }}
+                      onError={e => e.target.src = 'https://via.placeholder.com/1200x520?text=Image+Not+Found'}
                     />
                   </Carousel.Item>
                 ))
+              ) : (
+                <Carousel.Item>
+                  <img
+                    src="https://via.placeholder.com/1200x520?text=No+Images+Uploaded"
+                    className="d-block w-100"
+                    alt="No images"
+                  />
+                </Carousel.Item>
               )}
             </Carousel>
-          </Col>
 
-          {/* Sidebar Info */}
-          <Col lg={4}>
-            <Card className="shadow-lg border-0 sticky-top" style={{ top: '100px' }}>
-              <Card.Body className="p-4">
-                <h2 className="fw-bold text-primary">{hostel.name || 'Unnamed Hostel'}</h2>
-                <p className="text-muted">
-                  <i className="bi bi-geo-alt-fill me-2"></i> {hostel.location || 'N/A'}
+            <Card className="shadow-lg border-0 mb-5">
+              <Card.Body className="p-5">
+                <h1 className="fw-bold mb-3 text-primary">{hostel.name}</h1>
+                <p className="lead text-muted mb-4">
+                  <i className="bi bi-geo-alt-fill me-2 text-danger"></i>
+                  {hostel.location} • {hostel.type}
                 </p>
-                <div className="d-flex align-items-center mb-3">
-                  <Badge bg="success" className="me-2 fs-6">{hostel.type || 'N/A'}</Badge>
-                  <Badge bg="warning" className="text-dark fs-6">
-                    <i className="bi bi-star-fill me-1"></i> {hostel.rating?.toFixed(1) || 'N/A'}
-                  </Badge>
-                </div>
 
-                <div className="bg-primary text-white p-3 rounded-3 text-center mb-4">
-                  <h4 className="mb-1">Total Available Seats</h4>
-                  <h2 className="fw-bold mb-0">{hostel.availableSeats || 0}</h2>
+                <div className="d-flex flex-wrap gap-3 mb-4">
+                  <Badge bg="success" className="fs-5 px-4 py-2">
+                    {hostel.availableSeats || 0} Seats Available
+                  </Badge>
+                  <Badge bg="warning" className="fs-5 px-4 py-2 text-dark">
+                    Rating: {hostel.rating?.toFixed(1) || 'New'} ★
+                  </Badge>
                 </div>
 
                 <Button
                   size="lg"
-                  className="w-100 btn-primary rounded-pill fw-bold py-3 shadow-lg"
+                  variant="primary"
+                  className="w-100 rounded-pill fw-bold py-3 shadow"
                   onClick={handleBookNow}
                 >
-                  <i className="bi bi-calendar-check me-2"></i>
-                  Book Now
+                  <i className="bi bi-calendar-check-fill me-2 fs-4"></i>
+                  Book a Seat Now
                 </Button>
               </Card.Body>
             </Card>
-          </Col>
-        </Row>
 
-        {/* Room Types & Pricing */}
-        <Row className="mb-5">
-          <Col>
-            <h3 className="fw-bold text-primary mb-4">
-              <i className="bi bi-door-open me-2"></i> Room Types & Pricing
-            </h3>
-            <Table responsive striped bordered hover variant="light">
-              <thead>
-                <tr>
-                  <th>Room Type</th>
-                  <th>Price per Month (₹)</th>
-                  <th>Total Seats</th>
-                  <th>Available Seats</th>
-                </tr>
-              </thead>
-              <tbody>
-                {(hostel.rooms || []).length === 0 ? (
-                  <tr>
-                    <td colSpan="4" className="text-center py-3">No room details available</td>
-                  </tr>
-                ) : (
-                  hostel.rooms.map((room, idx) => (
-                    <tr key={idx}>
-                      <td>{room.type || 'N/A'}</td>
-                      <td>{room.price?.toLocaleString() || 'N/A'}</td>
-                      <td>{room.totalSeats || 0}</td>
-                      <td>{(room.totalSeats || 0) - (room.occupied || 0)}</td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </Table>
-          </Col>
-        </Row>
-
-        {/* Facilities */}
-        <Row className="mb-5">
-          <Col lg={8}>
-            <h3 className="fw-bold text-primary mb-4">
-              <i className="bi bi-check2-circle me-2"></i> Facilities Included
-            </h3>
-            <Row className="g-4">
-              {(hostel.facilities || []).length === 0 ? (
-                <Col>
-                  <p className="text-muted">No facilities listed</p>
-                </Col>
-              ) : (
-                hostel.facilities.map((facility, idx) => (
-                  <Col md={6} key={idx}>
-                    <div className="d-flex align-items-center p-3 bg-white rounded-3 shadow-sm">
-                      <i className={`bi ${facilitiesWithIcons[facility] || 'bi-check-circle'} fs-3 text-success me-3`}></i>
-                      <span className="fw-medium">{facility}</span>
-                    </div>
-                  </Col>
-                ))
-              )}
-            </Row>
-          </Col>
-
-          {/* Owner Contact */}
-          <Col lg={4}>
-            <Card className="shadow-lg border-0">
-              <Card.Header className="bg-primary text-white text-center py-3">
-                <h5 className="mb-0 fw-bold">
-                  <i className="bi bi-person-circle me-2"></i> Hostel Owner
-                </h5>
+            {/* Room Types Table */}
+            <Card className="shadow-sm mb-5">
+              <Card.Header className="bg-primary text-white">
+                <h4 className="mb-0">Room Types & Availability</h4>
               </Card.Header>
-              <Card.Body className="text-center">
-                <div className="bg-light rounded-circle mx-auto mb-3 d-flex align-items-center justify-content-center" style={{ width: '100px', height: '100px' }}>
-                  <i className="bi bi-person fs-1 text-primary"></i>
+              <Card.Body>
+                <Table striped bordered hover responsive className="mb-0">
+                  <thead>
+                    <tr>
+                      <th>Room Type</th>
+                      <th>Total Seats</th>
+                      <th>Occupied</th>
+                      <th>Available</th>
+                      <th>Price per Seat</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {Object.keys(roomSummary).length === 0 ? (
+                      <tr>
+                        <td colSpan="5" className="text-center py-4 text-muted">
+                          No room types configured yet
+                        </td>
+                      </tr>
+                    ) : (
+                      Object.values(roomSummary).map((r, i) => (
+                        <tr key={i}>
+                          <td className="fw-medium">{r.type}</td>
+                          <td>{r.totalSeats}</td>
+                          <td>{r.occupied}</td>
+                          <td className={r.available > 0 ? 'text-success fw-bold' : 'text-danger fw-bold'}>
+                            {r.available}
+                          </td>
+                          <td>₹{r.price?.toLocaleString() || '—'}/month</td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </Table>
+              </Card.Body>
+            </Card>
+
+            {/* Facilities */}
+            <Card className="shadow-sm mb-5">
+              <Card.Header className="bg-info text-white">
+                <h4 className="mb-0">Facilities</h4>
+              </Card.Header>
+              <Card.Body>
+                <Row className="g-3">
+                  {(hostel.facilities || []).length === 0 ? (
+                    <Col><p className="text-muted text-center py-4">No facilities listed</p></Col>
+                  ) : (
+                    hostel.facilities.map((f, i) => (
+                      <Col md={4} key={i}>
+                        <div className="d-flex align-items-center p-3 bg-white rounded shadow-sm">
+                          <i className={`bi ${facilitiesWithIcons[f] || 'bi-check-circle-fill'} fs-3 text-info me-3`}></i>
+                          <span className="fw-medium fs-5">{f}</span>
+                        </div>
+                      </Col>
+                    ))
+                  )}
+                </Row>
+              </Card.Body>
+            </Card>
+          </Col>
+
+          {/* Sidebar - Owner Info */}
+          <Col lg={4}>
+            <Card className="shadow-lg border-0 sticky-top" style={{ top: '80px' }}>
+              <Card.Header className="bg-dark text-white text-center py-4">
+                <h4 className="mb-0">Hostel Owner</h4>
+              </Card.Header>
+              <Card.Body className="text-center py-5">
+                <div className="bg-light rounded-circle mx-auto mb-4 d-flex align-items-center justify-content-center" style={{ width: '120px', height: '120px' }}>
+                  <i className="bi bi-person-circle fs-1 text-primary"></i>
                 </div>
-                <h5 className="fw-bold">{hostel.owner?.name || 'Owner'}</h5>
-                <p className="text-muted">
-                  <i className="bi bi-telephone me-2"></i> {hostel.owner?.phone || 'N/A'}
-                  <br />
-                  <i className="bi bi-envelope me-2"></i> {hostel.owner?.email || 'N/A'}
+                <h4 className="fw-bold mb-2">{hostel.owner?.name || 'Owner'}</h4>
+                <p className="text-muted mb-3">
+                  <i className="bi bi-telephone-fill me-2"></i>
+                  {hostel.owner?.phone || 'Not available'}
                 </p>
-                <Button variant="outline-primary" className="rounded-pill">
-                  <i className="bi bi-chat-dots me-2"></i> Contact Owner
+                <p className="text-muted mb-4">
+                  <i className="bi bi-envelope-fill me-2"></i>
+                  {hostel.owner?.email || 'Not available'}
+                </p>
+                <Button variant="outline-primary" size="lg" className="rounded-pill px-5">
+                  <i className="bi bi-chat-dots-fill me-2"></i>
+                  Contact Owner
                 </Button>
               </Card.Body>
             </Card>
           </Col>
         </Row>
 
-        {/* Reviews */}
-        <Row className="mb-5">
+        {/* Booking Modal */}
+        <Modal show={showBookingModal} onHide={() => setShowBookingModal(false)} centered size="md">
+          <Modal.Header closeButton>
+            <Modal.Title className="fw-bold text-primary">
+              <i className="bi bi-calendar-check me-2"></i>
+              Book Your Seat
+            </Modal.Title>
+          </Modal.Header>
+          <Modal.Body>
+            <h5 className="mb-4">{hostel.name}</h5>
+            <Form>
+              <Form.Group className="mb-4">
+                <Form.Label className="fw-bold">Select Room Type</Form.Label>
+                <Form.Select
+                  value={selectedRoomType}
+                  onChange={e => setSelectedRoomType(e.target.value)}
+                >
+                  <option value="">Choose room type...</option>
+                  {availableRoomTypes.map(r => (
+                    <option key={r.type} value={r.type}>
+                      {r.type} — {r.available} available • ₹{r.price?.toLocaleString()}/month
+                    </option>
+                  ))}
+                </Form.Select>
+              </Form.Group>
+
+              <Form.Group className="mb-4">
+                <Form.Label className="fw-bold">Preferred Check-in Date</Form.Label>
+                <Form.Control
+                  type="date"
+                  value={checkInDate}
+                  onChange={e => setCheckInDate(e.target.value)}
+                  min={new Date().toISOString().split('T')[0]}
+                />
+              </Form.Group>
+
+              <Alert variant="info" className="mb-0">
+                <strong>Important:</strong> Your booking will be pending until the owner confirms it.
+              </Alert>
+            </Form>
+          </Modal.Body>
+          <Modal.Footer>
+            <Button variant="secondary" onClick={() => setShowBookingModal(false)}>
+              Cancel
+            </Button>
+            <Button
+              variant="success"
+              onClick={confirmBooking}
+              disabled={bookingLoading || !selectedRoomType || !checkInDate}
+              className="px-4"
+            >
+              {bookingLoading ? (
+                <>
+                  <Spinner as="span" animation="border" size="sm" className="me-2" />
+                  Booking...
+                </>
+              ) : (
+                'Confirm Booking'
+              )}
+            </Button>
+          </Modal.Footer>
+        </Modal>
+
+        {/* Reviews Section */}
+        <Row className="mt-5">
           <Col>
             <div className="d-flex justify-content-between align-items-center mb-4">
               <h3 className="fw-bold text-primary mb-0">
-                <i className="bi bi-chat-quote me-2"></i> Student Reviews ({reviews.length})
+                <i className="bi bi-chat-quote me-2"></i>
+                Student Reviews ({reviews.length})
               </h3>
+
               {isLoggedIn && (
-                <Button variant="outline-primary" onClick={() => setShowReviewForm(!showReviewForm)}>
-                  <i className="bi bi-plus-circle me-2"></i> Write a Review
+                <Button
+                  variant="outline-primary"
+                  onClick={() => setShowReviewForm(!showReviewForm)}
+                >
+                  <i className="bi bi-plus-circle me-2"></i>
+                  Write Review
                 </Button>
               )}
             </div>
 
             {showReviewForm && isLoggedIn && (
-              <Card className="mb-4 shadow-sm">
+              <Card className="mb-5 shadow-sm">
                 <Card.Body>
-                  <h5 className="mb-3">Share your experience</h5>
+                  <h5 className="mb-3">Your Experience</h5>
                   <Form>
                     <Form.Group className="mb-3">
-                      <Form.Label>Rating</Form.Label>
-                      <Form.Select value={reviewRating} onChange={(e) => setReviewRating(Number(e.target.value))}>
-                        {[5, 4, 3, 2, 1].map((r) => (
+                      <Form.Label>Rating (1–5)</Form.Label>
+                      <Form.Select
+                        value={reviewRating}
+                        onChange={e => setReviewRating(Number(e.target.value))}
+                      >
+                        {[5, 4, 3, 2, 1].map(r => (
                           <option key={r} value={r}>{r} Stars</option>
                         ))}
                       </Form.Select>
                     </Form.Group>
+
                     <Form.Group className="mb-3">
                       <Form.Label>Your Review</Form.Label>
                       <Form.Control
                         as="textarea"
-                        rows={3}
+                        rows={4}
                         value={reviewComment}
-                        onChange={(e) => setReviewComment(e.target.value)}
-                        placeholder="Tell us about your stay..."
+                        onChange={e => setReviewComment(e.target.value)}
+                        placeholder="Share your honest feedback..."
                       />
                     </Form.Group>
-                    <Button variant="primary" onClick={handleSubmitReview}>
+
+                    <Button variant="primary" onClick={submitReview}>
                       Submit Review
                     </Button>
                   </Form>
@@ -357,28 +477,27 @@ function HostelDetails({ triggerToast, isLoggedIn }) {
             )}
 
             {reviews.length === 0 ? (
-              <Alert variant="info">No reviews yet. Be the first to review!</Alert>
+              <Alert variant="info" className="text-center py-5">
+                No reviews yet. Be the first to share your experience!
+              </Alert>
             ) : (
               <Row className="g-4">
-                {reviews.map((review) => (
-                  <Col md={4} key={review._id}>
-                    <Card className="shadow-sm border-0 h-100">
+                {reviews.map(review => (
+                  <Col md={6} key={review._id}>
+                    <Card className="shadow-sm h-100">
                       <Card.Body>
-                        <div className="d-flex align-items-center mb-3">
-                          <div className="bg-light rounded-circle me-3 d-flex align-items-center justify-content-center" style={{ width: '50px', height: '50px' }}>
-                            <i className="bi bi-person fs-4 text-primary"></i>
-                          </div>
+                        <div className="d-flex justify-content-between mb-3">
                           <div>
-                            <h6 className="mb-0 fw-bold">{review.user?.name || 'Student'}</h6>
-                            <small className="text-muted">
-                              {new Date(review.createdAt).toLocaleDateString()}
-                            </small>
+                            <h6 className="fw-bold mb-1">{review.user?.name || 'Anonymous'}</h6>
+                            <div className="text-warning fs-5">
+                              {'★'.repeat(review.rating)}{'☆'.repeat(5 - review.rating)}
+                            </div>
                           </div>
+                          <small className="text-muted">
+                            {new Date(review.createdAt).toLocaleDateString()}
+                          </small>
                         </div>
-                        <p className="text-warning mb-2">
-                          {'★'.repeat(review.rating || 0)}{'☆'.repeat(5 - (review.rating || 0))}
-                        </p>
-                        <p className="text-muted">{review.comment || 'No comment'}</p>
+                        <p className="text-muted mb-0">{review.comment || 'No comment provided'}</p>
                       </Card.Body>
                     </Card>
                   </Col>
@@ -387,63 +506,6 @@ function HostelDetails({ triggerToast, isLoggedIn }) {
             )}
           </Col>
         </Row>
-
-        {/* Booking Modal */}
-        <Modal show={showBookingModal} onHide={() => setShowBookingModal(false)} centered>
-          <Modal.Header closeButton>
-            <Modal.Title className="fw-bold text-primary">
-              <i className="bi bi-calendar-check me-2"></i> Confirm Booking
-            </Modal.Title>
-          </Modal.Header>
-          <Modal.Body>
-            <h5 className="fw-bold mb-3">{hostel.name || 'Unnamed Hostel'}</h5>
-            <Form.Group className="mb-4">
-              <Form.Label className="fw-bold">Preferred Room Type</Form.Label>
-              <Form.Select
-                value={selectedRoomType}
-                onChange={(e) => setSelectedRoomType(e.target.value)}
-              >
-                {(hostel.rooms || []).map((room) => {
-                  const key = (room.type || '').toLowerCase().replace('-sharing', '');
-                  return room.totalSeats > room.occupied ? (
-                    <option key={room._id} value={key}>
-                      {room.type || 'Unknown'} - ₹{room.price?.toLocaleString() || 'N/A'}/month ({room.totalSeats - room.occupied} available)
-                    </option>
-                  ) : null;
-                })}
-              </Form.Select>
-            </Form.Group>
-            <Form.Group className="mb-4">
-              <Form.Label className="fw-bold">Preferred Check-in Date</Form.Label>
-              <Form.Control
-                type="date"
-                value={checkInDate}
-                onChange={(e) => setCheckInDate(e.target.value)}
-                min={new Date().toISOString().split('T')[0]}
-              />
-            </Form.Group>
-            <div className="alert alert-info mt-4">
-              <strong>Note:</strong> Final allocation will be confirmed by the hostel owner.
-            </div>
-          </Modal.Body>
-          <Modal.Footer>
-            <Button variant="secondary" onClick={() => setShowBookingModal(false)}>
-              Cancel
-            </Button>
-            <Button variant="primary" onClick={confirmBooking} className="rounded-pill px-4" disabled={bookingLoading}>
-              {bookingLoading ? (
-                <>
-                  <Spinner as="span" animation="border" size="sm" className="me-2" />
-                  Booking...
-                </>
-              ) : (
-                <>
-                  <i className="bi bi-check-circle me-2"></i> Confirm Booking
-                </>
-              )}
-            </Button>
-          </Modal.Footer>
-        </Modal>
       </Container>
     </section>
   );

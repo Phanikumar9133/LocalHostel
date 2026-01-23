@@ -29,11 +29,9 @@ function Profile({ userRole = 'user', isLoggedIn = true, triggerToast }) {
 
   useEffect(() => {
     if (!isLoggedIn) return;
-
     const fetchProfileData = async () => {
       try {
         setLoading(true);
-
         // Fetch user profile
         const profileRes = await api.get('/profile');
         const user = profileRes.data;
@@ -47,7 +45,6 @@ function Profile({ userRole = 'user', isLoggedIn = true, triggerToast }) {
           }),
           role: user.role,
         });
-
         // Fetch bookings
         if (user.role === 'user') {
           const bookingsRes = await api.get('/bookings/user');
@@ -55,12 +52,10 @@ function Profile({ userRole = 'user', isLoggedIn = true, triggerToast }) {
         } else if (user.role === 'owner') {
           const bookingsRes = await api.get('/bookings/owner');
           setBookings(bookingsRes.data);
-
           // Fetch owned hostels
           const hostelsRes = await api.get('/hostels');
           const ownerHostels = hostelsRes.data.filter(h => h.owner === user._id);
           setOwnedHostels(ownerHostels);
-
           // Calculate stats
           let totalSeats = 0;
           let occupiedSeats = 0;
@@ -70,11 +65,9 @@ function Profile({ userRole = 'user', isLoggedIn = true, triggerToast }) {
               occupiedSeats += r.occupied || 0;
             });
           });
-
           const availableSeats = totalSeats - occupiedSeats;
           const pendingBookings = bookingsRes.data.filter(b => b.status === 'Pending').length;
           const monthlyEarnings = `₹${(bookingsRes.data.reduce((sum, b) => sum + (b.price || 0), 0) * 0.8).toLocaleString()}`;
-
           setOwnerStats({
             totalSeats,
             occupiedSeats,
@@ -90,7 +83,6 @@ function Profile({ userRole = 'user', isLoggedIn = true, triggerToast }) {
         setLoading(false);
       }
     };
-
     fetchProfileData();
   }, [isLoggedIn, userRole]);
 
@@ -106,7 +98,6 @@ function Profile({ userRole = 'user', isLoggedIn = true, triggerToast }) {
       setError(err);
       return;
     }
-
     try {
       await api.put('/profile', {
         name: userData.name,
@@ -137,7 +128,6 @@ function Profile({ userRole = 'user', isLoggedIn = true, triggerToast }) {
       </section>
     );
   }
-
   if (loading) {
     return (
       <section className="py-5 text-center min-vh-100 d-flex align-items-center justify-content-center">
@@ -146,12 +136,10 @@ function Profile({ userRole = 'user', isLoggedIn = true, triggerToast }) {
       </section>
     );
   }
-
   return (
     <section className="profile-page py-5 bg-light min-vh-100">
       <Container>
         {error && <Alert variant="danger">{error}</Alert>}
-
         <Row className="mb-5">
           <Col>
             <h2 className="fw-bold text-primary text-center mb-4">
@@ -160,7 +148,6 @@ function Profile({ userRole = 'user', isLoggedIn = true, triggerToast }) {
             </h2>
           </Col>
         </Row>
-
         {/* Profile Header Card */}
         <Row className="mb-5">
           <Col lg={4}>
@@ -189,7 +176,6 @@ function Profile({ userRole = 'user', isLoggedIn = true, triggerToast }) {
               </Card.Body>
             </Card>
           </Col>
-
           <Col lg={8}>
             <Card className="shadow-lg border-0 h-100">
               <Card.Body className="p-5">
@@ -237,7 +223,6 @@ function Profile({ userRole = 'user', isLoggedIn = true, triggerToast }) {
             </Card>
           </Col>
         </Row>
-
         {/* Student Bookings */}
         {userRole === 'user' && (
           <Row>
@@ -288,7 +273,6 @@ function Profile({ userRole = 'user', isLoggedIn = true, triggerToast }) {
             </Col>
           </Row>
         )}
-
         {/* Owner Section */}
         {userRole === 'owner' && (
           <>
@@ -326,7 +310,6 @@ function Profile({ userRole = 'user', isLoggedIn = true, triggerToast }) {
                 </Card>
               </Col>
             </Row>
-
             {/* Owned Hostels */}
             <Row className="mb-5">
               <Col>
@@ -373,7 +356,6 @@ function Profile({ userRole = 'user', isLoggedIn = true, triggerToast }) {
                 )}
               </Col>
             </Row>
-
             {/* Owner Dashboard Button */}
             <div className="text-center">
               <Button href="/owner-dashboard" size="lg" className="btn-success rounded-pill px-5 py-3 fw-bold shadow-lg">

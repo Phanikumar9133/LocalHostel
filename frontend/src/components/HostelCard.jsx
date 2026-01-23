@@ -2,23 +2,19 @@
 import { Link } from 'react-router-dom';
 import { Card, Badge } from 'react-bootstrap';
 
-// Backend base URL (change if your domain changes)
-const API_BASE_URL = 'https://localhostel.onrender.com';
-
 function HostelCard({ hostel }) {
-  // Handle rating safely
+  // DIRECT Cloudinary URL - NO BASE URL ADDED!
+  const imageSrc = hostel.images && hostel.images.length > 0 
+    ? hostel.images[0]  // Exact image uploaded by owner
+    : 'https://picsum.photos/400/250?blur=2';
+
   const rating = hostel.rating || 0;
   const fullStars = Math.floor(rating);
   const emptyStars = 5 - fullStars;
 
-  // Use full URL for images with a reliable fallback
-  const imageSrc = hostel.images?.length > 0 
-    ? `${API_BASE_URL}${hostel.images[0]}`  // Add base URL to relative path
-    : 'https://picsum.photos/seed/hostel/400/250';  // Reliable placeholder (random image)
-
   return (
     <div className="col-lg-4 col-md-6 mb-5">
-      <Card className="h-100 border-0 overflow-hidden shadow-sm hover-lift">
+      <Card className="h-100 border-0 overflow-hidden shadow-sm hover-lift rounded-4">
         <div className="position-relative overflow-hidden">
           <img
             src={imageSrc}
@@ -26,19 +22,20 @@ function HostelCard({ hostel }) {
             alt={hostel.name || 'Hostel'}
             style={{ height: '250px', objectFit: 'cover' }}
             onError={(e) => {
-              e.target.onerror = null;  // Prevent infinite loop
-              e.target.src = 'https://picsum.photos/seed/fallback/400/250';  // Reliable fallback
+              e.target.onerror = null;
+              e.target.src = 'https://picsum.photos/400/250?grayscale';
             }}
           />
           <div className="position-absolute top-0 end-0 m-3 bg-success text-white px-3 py-1 rounded-pill small fw-bold">
             {hostel.availableSeats || 0} Seats Left
           </div>
         </div>
+
         <Card.Body className="d-flex flex-column p-4">
           <div className="d-flex justify-content-between align-items-start mb-2">
             <Card.Title className="mb-0 fw-bold">{hostel.name || 'Unnamed Hostel'}</Card.Title>
             <Badge bg="primary" className="fs-6">
-              {hostel.type?.split(' ')[0] || 'N/A'} {/* e.g., "Boys" or "Girls" */}
+              {hostel.type?.split(' ')[0] || 'N/A'}
             </Badge>
           </div>
 
