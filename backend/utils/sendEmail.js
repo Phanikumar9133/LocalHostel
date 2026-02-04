@@ -3,83 +3,91 @@ const nodemailer = require('nodemailer');
 
 const sendBookingNotification = async (ownerEmail, bookingData) => {
   try {
+    // Create transporter with Gmail settings
     const transporter = nodemailer.createTransport({
       service: 'gmail',
+      secure: true,               // Use TLS/SSL (recommended)
       auth: {
         user: process.env.EMAIL_USER,
-        pass: process.env.EMAIL_PASS,
+        pass: process.env.EMAIL_PASS.replace(/\s+/g, ''),  // ← REMOVE SPACES from App Password
       },
     });
 
-    const bookingLink = `${process.env.FRONTEND_URL}/owner-dashboard?booking=${bookingData._id}`;
+    // Generate secure frontend link (fallback if bookingData._id missing)
+    const bookingId = bookingData.bookingId || bookingData._id || 'new';
+    const bookingLink = `${process.env.FRONTEND_URL}/owner-dashboard?booking=${bookingId}`;
 
     const mailOptions = {
       from: `"HostelHub Booking Alert" <${process.env.EMAIL_USER}>`,
       to: ownerEmail,
       subject: `New Booking Request - ${bookingData.hostelName || 'Your Hostel'}`,
       html: `
-        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 25px; border: 1px solid #e0e0e0; border-radius: 12px; background: #ffffff;">
-          <h2 style="color: #00b894; text-align: center; margin-bottom: 20px;">New Booking Request!</h2>
+        <div style="font-family: Arial, Helvetica, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 10px; background: #ffffff; color: #333;">
+          <h2 style="color: #00b894; text-align: center; margin-bottom: 24px;">New Booking Request!</h2>
           
-          <p style="font-size: 1.05rem; color: #333;">A student has just requested a seat in your hostel:</p>
+          <p style="font-size: 16px; line-height: 1.5;">A student has requested a seat in your hostel:</p>
 
-          <table style="width: 100%; margin: 20px 0; border-collapse: collapse; font-size: 1rem;">
+          <table style="width: 100%; margin: 20px 0; border-collapse: collapse; font-size: 15px;">
             <tr style="background: #f8fffb;">
-              <td style="padding: 12px; border: 1px solid #e0f0e8;"><strong>Student Name</strong></td>
-              <td style="padding: 12px; border: 1px solid #e0f0e8;">${bookingData.studentName || 'Student'}</td>
+              <td style="padding: 12px; border: 1px solid #d0e8df; font-weight: bold;">Student Name</td>
+              <td style="padding: 12px; border: 1px solid #d0e8df;">${bookingData.studentName || 'Student'}</td>
             </tr>
             <tr>
-              <td style="padding: 12px; border: 1px solid #e0f0e8;"><strong>Room Type</strong></td>
-              <td style="padding: 12px; border: 1px solid #e0f0e8;">${bookingData.roomType}</td>
+              <td style="padding: 12px; border: 1px solid #d0e8df; font-weight: bold;">Room Type</td>
+              <td style="padding: 12px; border: 1px solid #d0e8df;">${bookingData.roomType || 'N/A'}</td>
             </tr>
             <tr style="background: #f8fffb;">
-              <td style="padding: 12px; border: 1px solid #e0f0e8;"><strong>Check-in Date</strong></td>
-              <td style="padding: 12px; border: 1px solid #e0f0e8;">${new Date(bookingData.checkInDate).toLocaleDateString('en-IN')}</td>
+              <td style="padding: 12px; border: 1px solid #d0e8df; font-weight: bold;">Check-in Date</td>
+              <td style="padding: 12px; border: 1px solid #d0e8df;">${bookingData.checkInDate ? new Date(bookingData.checkInDate).toLocaleDateString('en-IN') : 'N/A'}</td>
             </tr>
             <tr>
-              <td style="padding: 12px; border: 1px solid #e0f0e8;"><strong>Price</strong></td>
-              <td style="padding: 12px; border: 1px solid #e0f0e8;">₹${bookingData.price}/month</td>
+              <td style="padding: 12px; border: 1px solid #d0e8df; font-weight: bold;">Price</td>
+              <td style="padding: 12px; border: 1px solid #d0e8df;">₹${bookingData.price || 'N/A'}/month</td>
             </tr>
             <tr style="background: #f8fffb;">
-              <td style="padding: 12px; border: 1px solid #e0f0e8;"><strong>Hostel</strong></td>
-              <td style="padding: 12px; border: 1px solid #e0f0e8;">${bookingData.hostelName || 'Your Hostel'}</td>
+              <td style="padding: 12px; border: 1px solid #d0e8df; font-weight: bold;">Hostel</td>
+              <td style="padding: 12px; border: 1px solid #d0e8df;">${bookingData.hostelName || 'Your Hostel'}</td>
             </tr>
           </table>
 
-          <div style="text-align: center; margin: 35px 0;">
+          <div style="text-align: center; margin: 40px 0;">
             <a href="${bookingLink}"
                style="background: linear-gradient(135deg, #00b894, #009b85); 
                       color: white; 
-                      padding: 16px 40px; 
+                      padding: 16px 36px; 
                       text-decoration: none; 
                       border-radius: 50px; 
-                      font-size: 1.15rem; 
+                      font-size: 18px; 
                       font-weight: bold; 
                       display: inline-block;
-                      box-shadow: 0 4px 15px rgba(0,184,148,0.3);">
-              View & Accept / Reject Booking
+                      box-shadow: 0 4px 12px rgba(0,184,148,0.25);">
+              View & Manage Booking
             </a>
           </div>
 
-          <p style="color: #555; font-size: 0.95rem; text-align: center; margin-top: 20px;">
-            Button not working? Copy-paste this link:<br>
-            <a href="${bookingLink}" style="color: #00b894;">${bookingLink}</a>
+          <p style="color: #555; font-size: 14px; text-align: center; margin: 20px 0;">
+            Button not working? Copy and paste this link:<br>
+            <a href="${bookingLink}" style="color: #00b894; word-break: break-all;">${bookingLink}</a>
           </p>
 
-          <hr style="border: 0; border-top: 1px solid #eee; margin: 35px 0;">
+          <hr style="border: none; border-top: 1px solid #eee; margin: 30px 0;">
 
-          <p style="font-size: 0.85rem; color: #888; text-align: center;">
-            Sent by HostelHub • ${new Date().toLocaleString('en-IN')}
+          <p style="font-size: 13px; color: #777; text-align: center;">
+            Sent by HostelHub • ${new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}
           </p>
         </div>
       `,
     };
 
     const info = await transporter.sendMail(mailOptions);
-    console.log('✅ Owner email sent:', info.messageId);
-    return true;
+    console.log('✅ Owner email sent successfully → Message ID:', info.messageId);
+    return info;  // Return full info for debugging/logging if needed
+
   } catch (error) {
     console.error('❌ Email sending failed:', error.message);
+    if (error.response) {
+      console.error('SMTP Response:', error.response);
+    }
     return false;
   }
 };

@@ -5,7 +5,11 @@ const bookingSchema = new mongoose.Schema({
   hostel: { type: mongoose.Schema.Types.ObjectId, ref: 'Hostel', required: true },
   roomType: { type: String, required: true },
   checkInDate: { type: Date, required: true },
-  status: { type: String, enum: ['Pending', 'Confirmed', 'Cancelled'], default: 'Pending' },
+  status: {
+    type: String,
+    enum: ['Pending', 'Confirmed', 'Rejected', 'Cancelled'],
+    default: 'Pending'
+  },
   price: { type: Number, required: true },
 }, { timestamps: true });
 
