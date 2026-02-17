@@ -5,7 +5,7 @@ import { useNavigate, Link } from 'react-router-dom';
 import api from '../services/api';
 import { toast } from 'react-toastify';
 
-function Profile({ userRole = 'user', isLoggedIn = true, triggerToast }) {
+function Profile({ userRole = 'user', isLoggedIn = true }) {
   const navigate = useNavigate();
   const [editMode, setEditMode] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -29,86 +29,114 @@ function Profile({ userRole = 'user', isLoggedIn = true, triggerToast }) {
 
   useEffect(() => {
     if (!isLoggedIn) return;
+
     const fetchProfileData = async () => {
       try {
         setLoading(true);
-        // Fetch user profile
+        setError('');
+
+        // 1. Get user profile
         const profileRes = await api.get('/profile');
-        const user = profileRes.data;
+        const user = profileRes?.data || {};
+
         setUserData({
           name: user.name || '',
           email: user.email || '',
           phone: user.phone || '',
-          joinedDate: new Date(user.joinedDate || Date.now()).toLocaleDateString('en-US', {
-            month: 'long',
-            year: 'numeric',
-          }),
-          role: user.role,
+          joinedDate: user.joinedDate
+            ? new Date(user.joinedDate).toLocaleDateString('en-US', {
+                month: 'long',
+                year: 'numeric',
+              })
+            : 'N/A',
+          role: user.role || userRole,
         });
-        // Fetch bookings
-        if (user.role === 'user') {
+
+        // 2. Role-specific data
+        if (user.role === 'user' || (!user.role && userRole === 'user')) {
           const bookingsRes = await api.get('/bookings/user');
-          setBookings(bookingsRes.data);
-        } else if (user.role === 'owner') {
+          setBookings(Array.isArray(bookingsRes?.data) ? bookingsRes.data : []);
+        } 
+        else if (user.role === 'owner' || (!user.role && userRole === 'owner')) {
+          // Owner bookings
           const bookingsRes = await api.get('/bookings/owner');
-          setBookings(bookingsRes.data);
-          // Fetch owned hostels
+          const ownerBookings = Array.isArray(bookingsRes?.data) ? bookingsRes.data : [];
+          setBookings(ownerBookings);
+
+          // Owned hostels
           const hostelsRes = await api.get('/hostels');
-          const ownerHostels = hostelsRes.data.filter(h => h.owner === user._id);
-          setOwnedHostels(ownerHostels);
-          // Calculate stats
-          let totalSeats = 0;
-          let occupiedSeats = 0;
-          ownerHostels.forEach(h => {
-            h.rooms.forEach(r => {
-              totalSeats += r.totalSeats || 0;
-              occupiedSeats += r.occupied || 0;
+          const allHostels = Array.isArray(hostelsRes?.data) ? hostelsRes.data : [];
+          const myHostels = allHostels.filter((h) => h.owner === user._id);
+          setOwnedHostels(myHostels);
+
+          // Stats calculation (safe version)
+          let total = 0;
+          let occupied = 0;
+          myHostels.forEach((h) => {
+            (h.rooms || []).forEach((r) => {
+              total += Number(r.totalSeats || 0);
+              occupied += Number(r.occupied || 0);
             });
           });
-          const availableSeats = totalSeats - occupiedSeats;
-          const pendingBookings = bookingsRes.data.filter(b => b.status === 'Pending').length;
-          const monthlyEarnings = `₹${(bookingsRes.data.reduce((sum, b) => sum + (b.price || 0), 0) * 0.8).toLocaleString()}`;
+
+          const pending = ownerBookings.filter((b) => b.status === 'Pending').length;
+          const earnings = ownerBookings.reduce((sum, b) => sum + Number(b.price || 0), 0) * 0.8;
+
           setOwnerStats({
-            totalSeats,
-            occupiedSeats,
-            availableSeats,
-            monthlyEarnings,
-            pendingBookings,
+            totalSeats: total,
+            occupiedSeats: occupied,
+            availableSeats: total - occupied,
+            monthlyEarnings: `₹${Math.round(earnings).toLocaleString()}`,
+            pendingBookings: pending,
           });
         }
       } catch (err) {
-        setError(err.response?.data?.message || 'Failed to load profile');
-        toast.error('Failed to load profile data');
+        console.error('Profile fetch error:', err);
+        const msg = err.response?.data?.message || 'Failed to load profile data';
+        setError(msg);
+        toast.error(msg);
+
+        // Reset to safe empty values
+        setBookings([]);
+        setOwnedHostels([]);
       } finally {
         setLoading(false);
       }
     };
+
     fetchProfileData();
   }, [isLoggedIn, userRole]);
 
   const validateForm = (data) => {
-    if (!data.name || data.name.trim().length < 2) return "Name must be at least 2 characters.";
-    if (!data.phone || !/^\+91\d{10}$/.test(data.phone.replace(/\s/g, ''))) return "Phone must be +91 followed by 10 digits.";
+    if (!data.name?.trim() || data.name.trim().length < 2) {
+      return 'Name must be at least 2 characters.';
+    }
+    if (!data.phone || !/^\+91[6-9]\d{9}$/.test(data.phone.replace(/\s/g, ''))) {
+      return 'Phone must be valid Indian number (e.g. +919876543210)';
+    }
     return null;
   };
 
   const handleSave = async () => {
-    const err = validateForm(userData);
-    if (err) {
-      setError(err);
+    const validationError = validateForm(userData);
+    if (validationError) {
+      setError(validationError);
+      toast.error(validationError);
       return;
     }
+
     try {
       await api.put('/profile', {
-        name: userData.name,
-        phone: userData.phone,
+        name: userData.name.trim(),
+        phone: userData.phone.trim(),
       });
       setEditMode(false);
       setError('');
       toast.success('Profile updated successfully!');
     } catch (err) {
-      setError(err.response?.data?.message || 'Update failed');
-      toast.error('Failed to update profile');
+      const msg = err.response?.data?.message || 'Update failed';
+      setError(msg);
+      toast.error(msg);
     }
   };
 
@@ -119,8 +147,15 @@ function Profile({ userRole = 'user', isLoggedIn = true, triggerToast }) {
           <Card className="text-center p-5 shadow-lg">
             <i className="bi bi-shield-lock fs-1 text-warning mb-4"></i>
             <h2>Please Login</h2>
-            <p className="text-muted fs-5">You need to be logged in to view your profile and bookings.</p>
-            <Button onClick={() => navigate('/login')} variant="primary" size="lg" className="rounded-pill px-5 mt-3">
+            <p className="text-muted fs-5">
+              You need to be logged in to view your profile and bookings.
+            </p>
+            <Button
+              onClick={() => navigate('/login')}
+              variant="primary"
+              size="lg"
+              className="rounded-pill px-5 mt-3"
+            >
               <i className="bi bi-box-arrow-in-right me-2"></i> Login Now
             </Button>
           </Card>
@@ -128,6 +163,7 @@ function Profile({ userRole = 'user', isLoggedIn = true, triggerToast }) {
       </section>
     );
   }
+
   if (loading) {
     return (
       <section className="py-5 text-center min-vh-100 d-flex align-items-center justify-content-center">
@@ -136,10 +172,12 @@ function Profile({ userRole = 'user', isLoggedIn = true, triggerToast }) {
       </section>
     );
   }
+
   return (
     <section className="profile-page py-5 bg-light min-vh-100">
       <Container>
-        {error && <Alert variant="danger">{error}</Alert>}
+        {error && <Alert variant="danger" dismissible onClose={() => setError('')}>{error}</Alert>}
+
         <Row className="mb-5">
           <Col>
             <h2 className="fw-bold text-primary text-center mb-4">
@@ -148,20 +186,29 @@ function Profile({ userRole = 'user', isLoggedIn = true, triggerToast }) {
             </h2>
           </Col>
         </Row>
-        {/* Profile Header Card */}
-        <Row className="mb-5">
+
+        {/* Profile Header + Info */}
+        <Row className="mb-5 g-4">
           <Col lg={4}>
-            <Card className="text-center shadow-lg border-0">
+            <Card className="text-center shadow-lg border-0 h-100">
               <Card.Body className="p-5">
-                <div className={`rounded-circle mx-auto mb-4 d-flex align-items-center justify-content-center ${userRole === 'owner' ? 'bg-success text-white' : 'bg-primary text-white'}`} style={{ width: '120px', height: '120px' }}>
-                  <i className={`bi ${userRole === 'owner' ? 'bi-building' : 'bi-person'} fs-1`}></i>
+                <div
+                  className={`rounded-circle mx-auto mb-4 d-flex align-items-center justify-content-center ${
+                    userData.role === 'owner' ? 'bg-success' : 'bg-primary'
+                  } text-white`}
+                  style={{ width: '120px', height: '120px' }}
+                >
+                  <i className={`bi ${userData.role === 'owner' ? 'bi-building' : 'bi-person'} fs-1`}></i>
                 </div>
+
                 {!editMode ? (
                   <>
-                    <h4 className="fw-bold">{userData.name}</h4>
-                    <p className="text-muted">{userRole === 'owner' ? 'Hostel Owner' : 'Student'}</p>
-                    <Badge bg={userRole === 'owner' ? 'warning' : 'success'} className="fs-6">
-                      {userRole === 'owner' ? 'Verified Owner' : 'Active Member'}
+                    <h4 className="fw-bold">{userData.name || 'User'}</h4>
+                    <p className="text-muted">
+                      {userData.role === 'owner' ? 'Hostel Owner' : 'Student / User'}
+                    </p>
+                    <Badge bg={userData.role === 'owner' ? 'warning' : 'success'} className="fs-6">
+                      {userData.role === 'owner' ? 'Verified Owner' : 'Active Member'}
                     </Badge>
                   </>
                 ) : (
@@ -176,44 +223,70 @@ function Profile({ userRole = 'user', isLoggedIn = true, triggerToast }) {
               </Card.Body>
             </Card>
           </Col>
+
           <Col lg={8}>
             <Card className="shadow-lg border-0 h-100">
               <Card.Body className="p-5">
                 <h5 className="fw-bold text-primary mb-4">
                   <i className="bi bi-person-lines-fill me-2"></i> Personal Information
                 </h5>
+
                 {!editMode ? (
                   <ListGroup variant="flush">
-                    <ListGroup.Item><strong>Email:</strong> {userData.email}</ListGroup.Item>
-                    <ListGroup.Item><strong>Phone:</strong> {userData.phone || 'Not provided'}</ListGroup.Item>
-                    <ListGroup.Item><strong>Member Since:</strong> {userData.joinedDate}</ListGroup.Item>
+                    <ListGroup.Item>
+                      <strong>Email:</strong> {userData.email || 'Not provided'}
+                    </ListGroup.Item>
+                    <ListGroup.Item>
+                      <strong>Phone:</strong> {userData.phone || 'Not provided'}
+                    </ListGroup.Item>
+                    <ListGroup.Item>
+                      <strong>Member Since:</strong> {userData.joinedDate}
+                    </ListGroup.Item>
                   </ListGroup>
                 ) : (
                   <>
-                    <Form.Group className="mb-3">
-                      <Form.Label>Email</Form.Label>
+                    <Form.Group className="mb-4">
+                      <Form.Label>Email (cannot change)</Form.Label>
                       <Form.Control type="email" value={userData.email} disabled />
                     </Form.Group>
                     <Form.Group className="mb-3">
-                      <Form.Label>Phone</Form.Label>
+                      <Form.Label>Phone Number</Form.Label>
                       <Form.Control
                         type="tel"
                         value={userData.phone}
                         onChange={(e) => setUserData({ ...userData, phone: e.target.value })}
-                        placeholder="+91 9876543210"
+                        placeholder="+91 98765 43210"
                       />
                     </Form.Group>
                   </>
                 )}
+
                 <div className="text-end mt-4">
                   {!editMode ? (
-                    <Button variant="outline-primary" onClick={() => setEditMode(true)} className="rounded-pill px-5">
+                    <Button
+                      variant="outline-primary"
+                      onClick={() => setEditMode(true)}
+                      className="rounded-pill px-5"
+                    >
                       <i className="bi bi-pencil me-2"></i> Edit Profile
                     </Button>
                   ) : (
                     <>
-                      <Button variant="secondary" onClick={() => setEditMode(false)} className="me-3 rounded-pill">Cancel</Button>
-                      <Button variant="primary" onClick={handleSave} className="rounded-pill px-5">
+                      <Button
+                        variant="secondary"
+                        onClick={() => {
+                          setEditMode(false);
+                          setError('');
+                        }}
+                        className="me-3 rounded-pill px-4"
+                      >
+                        Cancel
+                      </Button>
+                      <Button
+                        variant="primary"
+                        onClick={handleSave}
+                        className="rounded-pill px-5"
+                      >
                         <i className="bi bi-check-lg me-2"></i> Save Changes
                       </Button>
                     </>
@@ -223,41 +296,52 @@ function Profile({ userRole = 'user', isLoggedIn = true, triggerToast }) {
             </Card>
           </Col>
         </Row>
-        {/* Student Bookings */}
-        {userRole === 'user' && (
+
+        {/* USER ROLE - Bookings */}
+        {userData.role !== 'owner' && (
           <Row>
             <Col>
               <h4 className="fw-bold text-primary mb-4">
-                <i className="bi bi-calendar-check me-2"></i> My Bookings ({bookings.length})
+                <i className="bi bi-calendar-check me-2"></i> 
+                My Bookings ({bookings?.length || 0})
               </h4>
-              {bookings.length === 0 ? (
+
+              {(bookings ?? []).length === 0 ? (
                 <Card className="text-center p-5 bg-white shadow-sm">
                   <i className="bi bi-inbox fs-1 text-muted mb-3"></i>
                   <p className="text-muted fs-5">No bookings yet!</p>
-                  <Button variant="primary" onClick={() => navigate('/hostels')} className="rounded-pill px-5 mt-3">
+                  <Button
+                    variant="primary"
+                    onClick={() => navigate('/hostels')}
+                    className="rounded-pill px-5 mt-3"
+                  >
                     <i className="bi bi-search me-2"></i> Find Hostels
                   </Button>
                 </Card>
               ) : (
                 <Row className="g-4">
-                  {bookings.map((booking) => (
-                    <Col md={6} lg={4} key={booking._id}>
+                  {(bookings ?? []).map((booking) => (
+                    <Col md={6} lg={4} key={booking?._id || Math.random()}>
                       <Card className="shadow-sm border-0 h-100 hover-lift">
                         <Card.Body>
                           <div className="d-flex justify-content-between mb-3">
-                            <h6 className="fw-bold">{booking.hostel?.name || 'Hostel'}</h6>
-                            <Badge bg={booking.status === 'Confirmed' ? 'success' : 'warning'}>
-                              {booking.status}
+                            <h6 className="fw-bold">{booking?.hostel?.name || 'Hostel'}</h6>
+                            <Badge bg={booking?.status === 'Confirmed' ? 'success' : 'warning'}>
+                              {booking?.status || 'Unknown'}
                             </Badge>
                           </div>
                           <p className="text-muted mb-2">
-                            <i className="bi bi-door-open me-2"></i> {booking.roomType}
+                            <i className="bi bi-door-open me-2"></i> {booking?.roomType || 'N/A'}
                           </p>
                           <p className="text-muted mb-2">
-                            <i className="bi bi-currency-rupee me-2"></i> ₹{booking.price}/month
+                            <i className="bi bi-currency-rupee me-2"></i> 
+                            ₹{booking?.price?.toLocaleString() || 0}/month
                           </p>
                           <p className="text-muted mb-0">
-                            <i className="bi bi-calendar me-2"></i> Check-in: {new Date(booking.checkInDate).toLocaleDateString()}
+                            <i className="bi bi-calendar me-2"></i> Check-in:{' '}
+                            {booking?.checkInDate
+                              ? new Date(booking.checkInDate).toLocaleDateString()
+                              : 'N/A'}
                           </p>
                         </Card.Body>
                         <Card.Footer className="bg-transparent border-0 text-end">
@@ -273,10 +357,11 @@ function Profile({ userRole = 'user', isLoggedIn = true, triggerToast }) {
             </Col>
           </Row>
         )}
-        {/* Owner Section */}
-        {userRole === 'owner' && (
+
+        {/* OWNER ROLE - Dashboard */}
+        {userData.role === 'owner' && (
           <>
-            {/* Stats Cards */}
+            {/* Stats */}
             <Row className="g-4 mb-5">
               <Col md={4}>
                 <Card className="text-center shadow-sm border-0">
@@ -310,42 +395,64 @@ function Profile({ userRole = 'user', isLoggedIn = true, triggerToast }) {
                 </Card>
               </Col>
             </Row>
-            {/* Owned Hostels */}
+
+            {/* My Hostels */}
             <Row className="mb-5">
               <Col>
                 <h4 className="fw-bold text-primary mb-4">
-                  <i className="bi bi-building me-2"></i> My Hostels ({ownedHostels.length})
+                  <i className="bi bi-building me-2"></i> My Hostels ({ownedHostels?.length || 0})
                 </h4>
-                {ownedHostels.length === 0 ? (
+
+                {(ownedHostels ?? []).length === 0 ? (
                   <Card className="text-center p-5 bg-white shadow-sm">
                     <i className="bi bi-inbox fs-1 text-muted mb-3"></i>
                     <p className="text-muted fs-5">You haven't published any hostels yet!</p>
-                    <Button variant="success" onClick={() => navigate('/owner-dashboard')} className="rounded-pill px-5 mt-3">
+                    <Button
+                      variant="success"
+                      onClick={() => navigate('/owner-dashboard')}
+                      className="rounded-pill px-5 mt-3"
+                    >
                       <i className="bi bi-plus-circle me-2"></i> Add Your First Hostel
                     </Button>
                   </Card>
                 ) : (
                   <Row className="g-4">
-                    {ownedHostels.map(hostel => (
-                      <Col md={6} lg={4} key={hostel._id}>
+                    {(ownedHostels ?? []).map((hostel) => (
+                      <Col md={6} lg={4} key={hostel?._id || Math.random()}>
                         <Card className="shadow-sm border-0 h-100 hover-lift">
                           <Card.Img
                             variant="top"
-                            src={hostel.images?.[0] ? `https://localhostel.onrender.com${hostel.images[0]}` : 'https://via.placeholder.com/400x250?text=Hostel'}
+                            src={
+                              hostel?.images?.[0]
+                                ? `https://localhostel.onrender.com${hostel.images[0]}`
+                                : 'https://via.placeholder.com/400x250?text=Hostel'
+                            }
                             style={{ height: '200px', objectFit: 'cover' }}
+                            onError={(e) => {
+                              e.target.src = 'https://via.placeholder.com/400x250?text=Image+Not+Found';
+                            }}
                           />
                           <Card.Body>
-                            <Card.Title className="fw-bold">{hostel.name}</Card.Title>
+                            <Card.Title className="fw-bold">{hostel?.name || 'Unnamed Hostel'}</Card.Title>
                             <p className="text-muted mb-2">
-                              <i className="bi bi-geo-alt me-2"></i>{hostel.location}
+                              <i className="bi bi-geo-alt me-2"></i>
+                              {hostel?.location || 'Location not set'}
                             </p>
                             <p className="text-muted mb-2">
-                              <i className="bi bi-people me-2"></i>{hostel.availableSeats || 0} seats available
+                              <i className="bi bi-people me-2"></i>
+                              {hostel?.availableSeats ?? 0} seats available
                             </p>
                             <p className="text-muted mb-3">
-                              <i className="bi bi-currency-rupee me-2"></i>₹{hostel.price}/seat
+                              <i className="bi bi-currency-rupee me-2"></i>₹
+                              {hostel?.price?.toLocaleString() || 0}/seat
                             </p>
-                            <Button variant="outline-primary" size="sm" as={Link} to={`/hostel/${hostel._id}`} className="w-100 rounded-pill">
+                            <Button
+                              variant="outline-primary"
+                              size="sm"
+                              as={Link}
+                              to={`/hostel/${hostel?._id}`}
+                              className="w-100 rounded-pill"
+                            >
                               View Details
                             </Button>
                           </Card.Body>
@@ -356,9 +463,14 @@ function Profile({ userRole = 'user', isLoggedIn = true, triggerToast }) {
                 )}
               </Col>
             </Row>
-            {/* Owner Dashboard Button */}
-            <div className="text-center">
-              <Button href="/owner-dashboard" size="lg" className="btn-success rounded-pill px-5 py-3 fw-bold shadow-lg">
+
+            <div className="text-center mt-5">
+              <Button
+                href="/owner-dashboard"
+                size="lg"
+                variant="success"
+                className="rounded-pill px-5 py-3 fw-bold shadow-lg"
+              >
                 <i className="bi bi-speedometer2 me-2"></i> Go to Owner Dashboard
               </Button>
             </div>

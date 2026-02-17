@@ -47,11 +47,17 @@ function HostelDetails({ triggerToast, isLoggedIn }) {
           api.get(`/reviews/${id}`)
         ]);
 
-        setHostel(hostelRes.data);
+        // Fix: Extract the actual hostel object (backend returns {success: true, hostel: {...}})
+        const hostelData = hostelRes.data.hostel || hostelRes.data || null;
+        if (!hostelData) {
+          throw new Error('Hostel data not found in response');
+        }
+        setHostel(hostelData);
+
         setReviews(reviewsRes.data || []);
 
         // Auto-select first available room type
-        const firstAvailable = hostelRes.data.rooms?.find(
+        const firstAvailable = hostelData.rooms?.find(
           r => (r.totalSeats || 0) > (r.occupied || 0)
         );
         if (firstAvailable) {
@@ -107,7 +113,7 @@ function HostelDetails({ triggerToast, isLoggedIn }) {
     setBookingLoading(true);
 
     try {
-      // Find the room object to get its price (backend may require it)
+      // Find the room object to get its price (though backend calculates it, sending it ensures consistency)
       const selectedRoom = hostel.rooms?.find(r => r.type === selectedRoomType);
       if (!selectedRoom) {
         throw new Error('Selected room type not found');
@@ -117,22 +123,20 @@ function HostelDetails({ triggerToast, isLoggedIn }) {
         hostel: id,
         roomType: selectedRoomType,
         checkInDate,
-        price: selectedRoom.price  // ← important: backend expects price
+        price: selectedRoom.price  // Optional: backend will override if needed
       };
 
-      console.log('Sending booking payload:', payload); // ← debug log
-
       const response = await api.post('/bookings', payload);
-
-      console.log('Booking response:', response.data); // ← debug log
 
       toast.success('Booking request sent successfully! Owner will review it soon.');
       setShowBookingModal(false);
       setCheckInDate('');
       setSelectedRoomType('');
     } catch (err) {
-      console.error('Booking error:', err);
-      const errorMsg = err.response?.data?.message || 'Failed to create booking. Please try again.';
+      const errorMsg =
+        err.response?.data?.message ||
+        err.response?.data?.error ||
+        'Failed to create booking. Please try again.';
       toast.error(errorMsg);
     } finally {
       setBookingLoading(false);
@@ -374,7 +378,7 @@ function HostelDetails({ triggerToast, isLoggedIn }) {
                   value={selectedRoomType}
                   onChange={e => setSelectedRoomType(e.target.value)}
                 >
-                  <option value="">Choose room type...</option>
+                  <option value="">Choose...</option>
                   {availableRoomTypes.map(r => (
                     <option key={r.type} value={r.type}>
                       {r.type} — {r.available} available • ₹{r.price?.toLocaleString()}/month
@@ -468,7 +472,7 @@ function HostelDetails({ triggerToast, isLoggedIn }) {
                       />
                     </Form.Group>
 
-                    <Button variant="primary" onClick={submitReview}>
+                    <Button variant="primary" onClick={handleSubmitReview}>
                       Submit Review
                     </Button>
                   </Form>

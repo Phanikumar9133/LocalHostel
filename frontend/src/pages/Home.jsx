@@ -5,7 +5,7 @@ import WhyChooseUs from '../components/WhyChooseUs';
 import HostelCard from '../components/HostelCard';
 import api from '../services/api';
 import { toast } from 'react-toastify';
-import { Container, Row, Col, Spinner } from 'react-bootstrap';
+import { Container, Row, Spinner } from 'react-bootstrap';
 
 function Home() {
   const [hostels, setHostels] = useState([]);
@@ -16,11 +16,25 @@ function Home() {
     const fetchHostels = async () => {
       try {
         setLoading(true);
+
         const response = await api.get('/hostels');
-        setHostels(response.data);
+        
+        // Fix: extract the actual array
+        const hostelArray = 
+          Array.isArray(response.data) 
+            ? response.data 
+            : Array.isArray(response.data?.hostels) 
+              ? response.data.hostels 
+              : Array.isArray(response.data?.data) 
+                ? response.data.data 
+                : [];
+
+        setHostels(hostelArray);
       } catch (err) {
+        console.error("Failed to fetch hostels:", err); // optional debug
         setError(err.response?.data?.message || 'Failed to load hostels');
         toast.error('Failed to load featured hostels');
+        setHostels([]); // prevent undefined crash
       } finally {
         setLoading(false);
       }
@@ -29,10 +43,10 @@ function Home() {
     fetchHostels();
   }, []);
 
-  // Sort hostels by rating descending for Top-Rated section
+  // Now this is safe – hostels is always an array
   const topRatedHostels = [...hostels]
-    .sort((a, b) => b.rating - a.rating)
-    .slice(0, 4); // Show top 4
+    .sort((a, b) => (b.rating || 0) - (a.rating || 0)) // also protect against missing rating
+    .slice(0, 4);
 
   return (
     <>
