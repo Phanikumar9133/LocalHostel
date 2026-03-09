@@ -6,7 +6,7 @@ import { toast } from 'react-toastify';
 import { Container, Row, Col, Spinner } from 'react-bootstrap';
 
 function Hostels() {
-  const [hostels, setHostels] = useState([]);
+  const [hostels, setHostels] = useState([]);           // always array
   const [filteredHostels, setFilteredHostels] = useState([]);
   const [filters, setFilters] = useState({
     location: '',
@@ -21,10 +21,30 @@ function Hostels() {
       try {
         setLoading(true);
         const response = await api.get('/hostels');
-        setHostels(response.data);
-        setFilteredHostels(response.data); // Initial display
+
+        // ──── IMPORTANT FIX ────
+        // Extract the real array – handle different possible response shapes
+        let hostelArray = [];
+
+        if (Array.isArray(response.data)) {
+          hostelArray = response.data;
+        } else if (Array.isArray(response.data?.hostels)) {
+          hostelArray = response.data.hostels;
+        } else if (Array.isArray(response.data?.data)) {
+          hostelArray = response.data.data;
+        } else {
+          console.warn('Unexpected hostel response format:', response.data);
+          hostelArray = [];
+        }
+
+        setHostels(hostelArray);
+        setFilteredHostels(hostelArray); // Initial display = all hostels
+
       } catch (err) {
+        console.error('Failed to fetch hostels:', err);
         toast.error('Failed to load hostels');
+        setHostels([]);
+        setFilteredHostels([]);
       } finally {
         setLoading(false);
       }
@@ -35,12 +55,14 @@ function Hostels() {
 
   // Apply filters whenever filters or hostels change
   useEffect(() => {
+    // Start with full list (safe because it's always an array now)
     let result = [...hostels];
 
     // Filter by location (case-insensitive)
-    if (filters.location) {
+    if (filters.location.trim()) {
+      const search = filters.location.trim().toLowerCase();
       result = result.filter(hostel =>
-        hostel.location.toLowerCase().includes(filters.location.toLowerCase())
+        hostel.location?.toLowerCase().includes(search)
       );
     }
 
@@ -49,9 +71,12 @@ function Hostels() {
       result = result.filter(hostel => hostel.type === filters.type);
     }
 
-    // Filter by max price
+    // Filter by max price (convert to number safely)
     if (filters.price) {
-      result = result.filter(hostel => hostel.price <= Number(filters.price));
+      const maxPrice = Number(filters.price);
+      if (!isNaN(maxPrice)) {
+        result = result.filter(hostel => Number(hostel.price) <= maxPrice);
+      }
     }
 
     setFilteredHostels(result);
@@ -70,7 +95,7 @@ function Hostels() {
             <input
               type="text"
               className="form-control"
-              placeholder="Search by Location (e.g., Bangalore)"
+              placeholder="Search by Location (e.g., Guntur)"
               value={filters.location}
               onChange={(e) => setFilters({ ...filters, location: e.target.value })}
             />

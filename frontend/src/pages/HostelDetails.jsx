@@ -18,7 +18,7 @@ import { useState, useEffect } from 'react';
 import api from '../services/api';
 import { toast } from 'react-toastify';
 
-function HostelDetails({ triggerToast, isLoggedIn }) {
+function HostelDetails({ isLoggedIn }) {
   const { id } = useParams();
   const navigate = useNavigate();
 
@@ -47,7 +47,6 @@ function HostelDetails({ triggerToast, isLoggedIn }) {
           api.get(`/reviews/${id}`)
         ]);
 
-        // Fix: Extract the actual hostel object (backend returns {success: true, hostel: {...}})
         const hostelData = hostelRes.data.hostel || hostelRes.data || null;
         if (!hostelData) {
           throw new Error('Hostel data not found in response');
@@ -101,8 +100,10 @@ function HostelDetails({ triggerToast, isLoggedIn }) {
     setShowBookingModal(true);
   };
 
-  const confirmBooking = async () => {
-    // Validation
+  const confirmBooking = async (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+
     if (!selectedRoomType) {
       return toast.error('Please select a room type');
     }
@@ -113,7 +114,6 @@ function HostelDetails({ triggerToast, isLoggedIn }) {
     setBookingLoading(true);
 
     try {
-      // Find the room object to get its price (though backend calculates it, sending it ensures consistency)
       const selectedRoom = hostel.rooms?.find(r => r.type === selectedRoomType);
       if (!selectedRoom) {
         throw new Error('Selected room type not found');
@@ -123,7 +123,7 @@ function HostelDetails({ triggerToast, isLoggedIn }) {
         hostel: id,
         roomType: selectedRoomType,
         checkInDate,
-        price: selectedRoom.price  // Optional: backend will override if needed
+        price: selectedRoom.price || 0
       };
 
       const response = await api.post('/bookings', payload);
@@ -131,13 +131,31 @@ function HostelDetails({ triggerToast, isLoggedIn }) {
       toast.success('Booking request sent successfully! Owner will review it soon.');
       setShowBookingModal(false);
       setCheckInDate('');
-      setSelectedRoomType('');
+      setSelectedRoomType(
+        hostel.rooms?.find(r => (r.totalSeats || 0) > (r.occupied || 0))?.type || ''
+      );
     } catch (err) {
-      const errorMsg =
-        err.response?.data?.message ||
-        err.response?.data?.error ||
-        'Failed to create booking. Please try again.';
+      let errorMsg = 'Failed to create booking. Please try again.';
+
+      if (err.response) {
+        const { status, data } = err.response;
+        if (status === 401) {
+          errorMsg = 'Session expired. Please login again.';
+          localStorage.removeItem('token');
+          navigate('/login');
+        } else if (status === 400) {
+          errorMsg = data.message || data.error || errorMsg;
+        } else if (status === 403) {
+          errorMsg = 'You are not authorized to make this booking.';
+        } else if (status >= 500) {
+          errorMsg = 'Server error. Please try again later.';
+        } else {
+          errorMsg = data?.message || errorMsg;
+        }
+      }
+
       toast.error(errorMsg);
+      console.error('Booking error:', err);
     } finally {
       setBookingLoading(false);
     }
@@ -155,7 +173,7 @@ function HostelDetails({ triggerToast, isLoggedIn }) {
 
     try {
       const res = await api.post('/reviews', {
-        hostelId: id,  // backend expects hostelId (not hostel)
+        hostelId: id,
         rating: reviewRating,
         comment: reviewComment.trim()
       });
@@ -371,17 +389,18 @@ function HostelDetails({ triggerToast, isLoggedIn }) {
           </Modal.Header>
           <Modal.Body>
             <h5 className="mb-4">{hostel.name}</h5>
-            <Form>
+            <Form onSubmit={confirmBooking}>
               <Form.Group className="mb-4">
                 <Form.Label className="fw-bold">Select Room Type</Form.Label>
                 <Form.Select
                   value={selectedRoomType}
                   onChange={e => setSelectedRoomType(e.target.value)}
+                  required
                 >
                   <option value="">Choose...</option>
                   {availableRoomTypes.map(r => (
                     <option key={r.type} value={r.type}>
-                      {r.type} — {r.available} available • ₹{r.price?.toLocaleString()}/month
+                      {r.type} — {r.available} available • ₹{r.price?.toLocaleString() || '—'}/month
                     </option>
                   ))}
                 </Form.Select>
@@ -394,34 +413,35 @@ function HostelDetails({ triggerToast, isLoggedIn }) {
                   value={checkInDate}
                   onChange={e => setCheckInDate(e.target.value)}
                   min={new Date().toISOString().split('T')[0]}
+                  required
                 />
               </Form.Group>
 
-              <Alert variant="info" className="mb-0">
+              <Alert variant="info" className="mb-4">
                 <strong>Important:</strong> Your booking will be pending until the owner confirms it.
               </Alert>
+
+              <div className="d-flex justify-content-end gap-3">
+                <Button variant="secondary" type="button" onClick={() => setShowBookingModal(false)}>
+                  Cancel
+                </Button>
+                <Button
+                  variant="success"
+                  type="submit"
+                  disabled={bookingLoading || !selectedRoomType || !checkInDate}
+                >
+                  {bookingLoading ? (
+                    <>
+                      <Spinner as="span" animation="border" size="sm" className="me-2" />
+                      Processing...
+                    </>
+                  ) : (
+                    'Confirm Booking'
+                  )}
+                </Button>
+              </div>
             </Form>
           </Modal.Body>
-          <Modal.Footer>
-            <Button variant="secondary" onClick={() => setShowBookingModal(false)}>
-              Cancel
-            </Button>
-            <Button
-              variant="success"
-              onClick={confirmBooking}
-              disabled={bookingLoading || !selectedRoomType || !checkInDate}
-              className="px-4"
-            >
-              {bookingLoading ? (
-                <>
-                  <Spinner as="span" animation="border" size="sm" className="me-2" />
-                  Booking...
-                </>
-              ) : (
-                'Confirm Booking'
-              )}
-            </Button>
-          </Modal.Footer>
         </Modal>
 
         {/* Reviews Section */}

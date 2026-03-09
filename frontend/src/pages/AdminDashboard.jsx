@@ -1,3 +1,4 @@
+// src/pages/AdminDashboard.jsx
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../services/api';
@@ -49,23 +50,42 @@ function AdminDashboard({ triggerToast, handleLogout }) {
   const loadDashboardData = async () => {
     setLoading(true);
     try {
-      // Stats
+      // 1. Stats
       const statsRes = await api.get('/admin/dashboard');
       setStats(statsRes.data.stats || stats);
 
-      // Users
+      // 2. Users (with pagination/search)
       const usersRes = await api.get('/admin/users', {
         params: { page: userPage, limit: 10, search: userSearch, role: userRoleFilter }
       });
       setUsers(usersRes.data.users || []);
-      setTotalUsers(usersRes.data.pagination?.total || 0);
+      setTotalUsers(usersRes.data.pagination?.total || usersRes.data.total || 0);
 
-      // Hostels
+      // 3. Hostels – FIXED: extract the real array
       const hostelsRes = await api.get('/hostels');
-      setHostels(hostelsRes.data || []);
+      
+      let hostelArray = [];
+      
+      if (Array.isArray(hostelsRes.data)) {
+        hostelArray = hostelsRes.data;
+      } else if (Array.isArray(hostelsRes.data?.hostels)) {
+        hostelArray = hostelsRes.data.hostels;
+      } else if (Array.isArray(hostelsRes.data?.data)) {
+        hostelArray = hostelsRes.data.data;
+      } else {
+        console.warn('Unexpected /hostels response format:', hostelsRes.data);
+        hostelArray = [];
+      }
+
+      setHostels(hostelArray);
+
     } catch (err) {
       toast.error('Failed to load admin data');
-      console.error(err);
+      console.error('Admin data load error:', err);
+      // Prevent map crashes
+      setHostels([]);
+      setUsers([]);
+      setTotalUsers(0);
     } finally {
       setLoading(false);
     }
@@ -392,7 +412,6 @@ function AdminDashboard({ triggerToast, handleLogout }) {
         <Modal.Footer>
           <Button variant="secondary" onClick={() => setShowEditHostel(false)}>Cancel</Button>
           <Button variant="primary" onClick={() => {
-            // Call update API here
             api.put(`/hostels/${selectedItem._id}`, selectedItem)
               .then(() => {
                 toast.success('Hostel updated');

@@ -15,7 +15,7 @@ import Register from './pages/Register';
 import OwnerDashboard from './pages/OwnerDashboard';
 import Profile from './pages/Profile';
 import AdminLogin from './components/AdminLogin';
-import AdminDashboard from './pages/AdminDashboard';  // ← FIXED: Import added
+import AdminDashboard from './pages/AdminDashboard';
 import ToastNotification from './components/ToastNotification';
 
 function App() {
@@ -44,7 +44,9 @@ function App() {
   const handleLogin = (role) => {
     setIsLoggedIn(true);
     setUserRole(role);
-    triggerToast(`Welcome back! Logged in as ${role === 'owner' ? 'Hostel Owner' : role === 'admin' ? 'Administrator' : 'Student'}`);
+    setToastMessage(`Welcome back! Logged in as ${role === 'owner' ? 'Hostel Owner' : role === 'admin' ? 'Administrator' : 'Student'}`);
+    setShowToast(true);
+    setTimeout(() => setShowToast(false), 3000);
   };
 
   const handleLogout = () => {
@@ -53,18 +55,18 @@ function App() {
     localStorage.removeItem('userRole');
     setIsLoggedIn(false);
     setUserRole(null);
-    triggerToast('Logged out successfully!');
-  };
-
-  const triggerToast = (message) => {
-    setToastMessage(message);
+    setToastMessage('Logged out successfully!');
     setShowToast(true);
     setTimeout(() => setShowToast(false), 3000);
   };
 
   return (
     <Router>
-      <Navbar isLoggedIn={isLoggedIn} userRole={userRole} handleLogout={handleLogout} />
+      <Navbar 
+        isLoggedIn={isLoggedIn} 
+        userRole={userRole} 
+        handleLogout={handleLogout} 
+      />
 
       <Routes>
         {/* Public Routes */}
@@ -72,19 +74,27 @@ function App() {
         <Route path="/hostels" element={<Hostels />} />
         <Route 
           path="/hostel/:id" 
-          element={<HostelDetails triggerToast={triggerToast} isLoggedIn={isLoggedIn} />} 
+          element={<HostelDetails triggerToast={() => {}} isLoggedIn={isLoggedIn} />} 
         />
         <Route path="/about" element={<About />} />
         <Route path="/contact" element={<Contact />} />
 
-        {/* Auth Routes - Redirect if already logged in */}
+        {/* Auth Routes */}
         <Route 
           path="/login" 
-          element={isLoggedIn ? <Navigate to="/" replace /> : <Login handleLogin={handleLogin} />} 
+          element={
+            isLoggedIn 
+              ? <Navigate to="/" replace /> 
+              : <Login handleLogin={handleLogin} />
+          } 
         />
         <Route 
           path="/register" 
-          element={isLoggedIn ? <Navigate to="/" replace /> : <Register handleLogin={handleLogin} />} 
+          element={
+            isLoggedIn 
+              ? <Navigate to="/" replace /> 
+              : <Register handleLogin={handleLogin} />
+          } 
         />
 
         {/* Protected Routes */}
@@ -95,7 +105,7 @@ function App() {
               ? <Profile 
                   userRole={userRole} 
                   isLoggedIn={isLoggedIn} 
-                  triggerToast={triggerToast} 
+                  triggerToast={() => {}} 
                 />
               : <Navigate to="/login" replace />
           } 
@@ -104,8 +114,8 @@ function App() {
         <Route 
           path="/owner-dashboard" 
           element={
-            isLoggedIn && userRole === 'owner' 
-              ? <OwnerDashboard triggerToast={triggerToast} />
+            isLoggedIn && userRole === 'owner'
+              ? <OwnerDashboard triggerToast={() => {}} />
               : <Navigate to="/login" replace />
           } 
         />
@@ -114,16 +124,16 @@ function App() {
         <Route 
           path="/admin-login" 
           element={
-            isLoggedIn && userRole === 'admin' 
-              ? <Navigate to="/admin-dashboard" replace /> 
+            isLoggedIn && userRole === 'admin'
+              ? <Navigate to="/admin-dashboard" replace />
               : <AdminLogin handleLogin={handleLogin} />
           } 
         />
         <Route 
           path="/admin-dashboard" 
           element={
-            isLoggedIn && userRole === 'admin' 
-              ? <AdminDashboard triggerToast={triggerToast} handleLogout={handleLogout} />
+            isLoggedIn && userRole === 'admin'
+              ? <AdminDashboard triggerToast={() => {}} handleLogout={handleLogout} />
               : <Navigate to="/admin-login" replace />
           } 
         />
