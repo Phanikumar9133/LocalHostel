@@ -11,8 +11,42 @@ const app = express();
 // Connect to MongoDB
 connectDB();
 
-// Middleware
-app.use(cors());
+// ────────────────────────────────────────────────────────────────────────────────
+// CORS CONFIGURATION - FIXED & EXPLICIT
+// Allows localhost during development + your future deployed frontend
+// Handles preflight OPTIONS requests properly
+// ────────────────────────────────────────────────────────────────────────────────
+const allowedOrigins = [
+  'http://localhost:5173',              // Vite dev server
+  'http://localhost:3000',              // fallback for other local setups
+  // Add your deployed frontend URL(s) here later, e.g.:
+  // 'https://your-hostelhub-frontend.vercel.app',
+  // 'https://your-hostelhub-frontend.netlify.app',
+];
+
+// For quick testing you can temporarily use '*' (less secure)
+// const allowedOrigins = '*';
+
+app.use(cors({
+  origin: function (origin, callback) {
+    // Allow requests with no origin (like mobile apps, curl, Postman)
+    if (!origin) return callback(null, true);
+
+    if (allowedOrigins.indexOf(origin) !== -1 || allowedOrigins === '*') {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  credentials: true,                    // Optional: enable if you add cookies later
+}));
+
+// Handle preflight OPTIONS requests explicitly (helps on Render/Cloudflare)
+app.options('*', cors());
+
+// Other middleware
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
@@ -56,7 +90,7 @@ app.get('/api/test-email', async (req, res) => {
   }
 });
 
-// Error handling middleware (improved)
+// Global error handler
 app.use((err, req, res, next) => {
   console.error('Global error:', err.stack);
   res.status(500).json({
@@ -70,5 +104,5 @@ const PORT = process.env.PORT || 5000;
 
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
-  console.log(`API URL: ${process.env.NODE_ENV === 'production' ? 'https://your-render-app.onrender.com' : 'http://localhost:5000'}`);
+  console.log(`API URL: ${process.env.NODE_ENV === 'production' ? 'https://localhostel.onrender.com' : 'http://localhost:5000'}`);
 });
