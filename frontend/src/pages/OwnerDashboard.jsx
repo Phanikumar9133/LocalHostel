@@ -87,7 +87,7 @@ function OwnerDashboard({ triggerToast }) {
         }
 
         // 1. Fetch all hostels and filter owned ones
-        const hostelsRes = await api.get('/hostels');
+        const hostelsRes = await api.get('/hostels/my-hostels');
         const ownedHostels = Array.isArray(hostelsRes.data)
           ? hostelsRes.data.filter((h) => h?.owner?._id === user._id)
           : [];

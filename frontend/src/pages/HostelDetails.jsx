@@ -48,14 +48,13 @@ function HostelDetails({ isLoggedIn }) {
         ]);
 
         const hostelData = hostelRes.data.hostel || hostelRes.data || null;
-        if (!hostelData) {
-          throw new Error('Hostel data not found in response');
+        if (!hostelData || !hostelData._id) {
+          throw new Error('Invalid or missing hostel data');
         }
+
         setHostel(hostelData);
+        setReviews(Array.isArray(reviewsRes.data) ? reviewsRes.data : []);
 
-        setReviews(reviewsRes.data || []);
-
-        // Auto-select first available room type
         const firstAvailable = hostelData.rooms?.find(
           r => (r.totalSeats || 0) > (r.occupied || 0)
         );
@@ -63,7 +62,7 @@ function HostelDetails({ isLoggedIn }) {
           setSelectedRoomType(firstAvailable.type);
         }
       } catch (err) {
-        const msg = err.response?.data?.message || 'Failed to load hostel details';
+        const msg = err.response?.data?.message || err.message || 'Failed to load hostel';
         setError(msg);
         toast.error(msg);
       } finally {
@@ -71,7 +70,7 @@ function HostelDetails({ isLoggedIn }) {
       }
     };
 
-    fetchData();
+    if (id) fetchData();
   }, [id]);
 
   const facilitiesWithIcons = {
@@ -104,17 +103,25 @@ function HostelDetails({ isLoggedIn }) {
     e.preventDefault();
     e.stopPropagation();
 
-    if (!selectedRoomType) {
-      return toast.error('Please select a room type');
+    if (!selectedRoomType || !checkInDate) {
+      toast.error('Please select room type and check-in date');
+      return;
     }
-    if (!checkInDate) {
-      return toast.error('Please select a check-in date');
+
+    // Block past dates
+    const selected = new Date(checkInDate);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    if (selected < today) {
+      toast.error('Check-in date cannot be in the past');
+      return;
     }
 
     setBookingLoading(true);
+    const toastId = toast.loading('Sending booking request... (may take 30–120 seconds on first try due to server wake-up)');
 
     try {
-      const selectedRoom = hostel.rooms?.find(r => r.type === selectedRoomType);
+      const selectedRoom = hostel?.rooms?.find(r => r.type === selectedRoomType);
       if (!selectedRoom) {
         throw new Error('Selected room type not found');
       }
@@ -123,41 +130,61 @@ function HostelDetails({ isLoggedIn }) {
         hostel: id,
         roomType: selectedRoomType,
         checkInDate,
-        price: selectedRoom.price || 0
+        price: Number(selectedRoom.price) || 0
       };
+
+      console.log('[BOOKING] STEP 1 - Sending payload:', payload);
 
       const response = await api.post('/bookings', payload);
 
-      toast.success('Booking request sent successfully! Owner will review it soon.');
+      console.log('[BOOKING] STEP 2 - Success:', response.data);
+
+      toast.update(toastId, {
+        render: 'Booking request sent successfully! Owner will review it soon.',
+        type: 'success',
+        isLoading: false,
+        autoClose: 7000
+      });
+
       setShowBookingModal(false);
       setCheckInDate('');
       setSelectedRoomType(
-        hostel.rooms?.find(r => (r.totalSeats || 0) > (r.occupied || 0))?.type || ''
+        hostel?.rooms?.find(r => (r.totalSeats || 0) > (r.occupied || 0))?.type || ''
       );
-    } catch (err) {
-      let errorMsg = 'Failed to create booking. Please try again.';
 
-      if (err.response) {
+    } catch (err) {
+      console.error('[BOOKING] FULL ERROR:', err);
+
+      let msg = 'Failed to send booking request';
+
+      if (err.code === 'ECONNABORTED' || err.message.includes('timeout')) {
+        msg = 'Request timed out. Render server is waking up — please wait 1–2 minutes and try again.';
+      } else if (err.response) {
         const { status, data } = err.response;
-        if (status === 401) {
-          errorMsg = 'Session expired. Please login again.';
+        if (status === 400) msg = data.message || 'Invalid details (check room/date)';
+        else if (status === 401) {
+          msg = 'Session expired. Please login again.';
           localStorage.removeItem('token');
-          navigate('/login');
-        } else if (status === 400) {
-          errorMsg = data.message || data.error || errorMsg;
-        } else if (status === 403) {
-          errorMsg = 'You are not authorized to make this booking.';
-        } else if (status >= 500) {
-          errorMsg = 'Server error. Please try again later.';
-        } else {
-          errorMsg = data?.message || errorMsg;
+          setTimeout(() => navigate('/login'), 2000);
         }
+        else if (status === 500) msg = 'Server error — try again later';
+        else msg = data?.message || msg;
+      } else if (err.request) {
+        msg = 'No response from server. Check internet or Render status.';
+      } else {
+        msg = err.message || msg;
       }
 
-      toast.error(errorMsg);
-      console.error('Booking error:', err);
+      toast.update(toastId, {
+        render: msg,
+        type: 'error',
+        isLoading: false,
+        autoClose: 8000
+      });
+
     } finally {
       setBookingLoading(false);
+      console.log('[BOOKING] Loading cleared');
     }
   };
 
@@ -168,13 +195,14 @@ function HostelDetails({ isLoggedIn }) {
       return;
     }
     if (!reviewComment.trim()) {
-      return toast.warning('Review comment cannot be empty');
+      toast.warning('Review comment cannot be empty');
+      return;
     }
 
     try {
       const res = await api.post('/reviews', {
         hostelId: id,
-        rating: reviewRating,
+        rating: Number(reviewRating),
         comment: reviewComment.trim()
       });
 
@@ -217,12 +245,12 @@ function HostelDetails({ isLoggedIn }) {
         totalSeats: 0,
         occupied: 0,
         available: 0,
-        price: r.price
+        price: r.price || 0
       };
     }
-    roomSummary[r.type].totalSeats += r.totalSeats || 0;
-    roomSummary[r.type].occupied += r.occupied || 0;
-    roomSummary[r.type].available += (r.totalSeats || 0) - (r.occupied || 0);
+    roomSummary[r.type].totalSeats += Number(r.totalSeats || 0);
+    roomSummary[r.type].occupied += Number(r.occupied || 0);
+    roomSummary[r.type].available += (Number(r.totalSeats || 0) - Number(r.occupied || 0));
   });
 
   const availableRoomTypes = Object.values(roomSummary).filter(r => r.available > 0);
@@ -380,8 +408,15 @@ function HostelDetails({ isLoggedIn }) {
         </Row>
 
         {/* Booking Modal */}
-        <Modal show={showBookingModal} onHide={() => setShowBookingModal(false)} centered size="md">
-          <Modal.Header closeButton>
+        <Modal 
+          show={showBookingModal} 
+          onHide={() => setShowBookingModal(false)} 
+          centered 
+          size="md"
+          backdrop="static"
+          keyboard={!bookingLoading}
+        >
+          <Modal.Header closeButton={!bookingLoading}>
             <Modal.Title className="fw-bold text-primary">
               <i className="bi bi-calendar-check me-2"></i>
               Book Your Seat
@@ -391,11 +426,12 @@ function HostelDetails({ isLoggedIn }) {
             <h5 className="mb-4">{hostel.name}</h5>
             <Form onSubmit={confirmBooking}>
               <Form.Group className="mb-4">
-                <Form.Label className="fw-bold">Select Room Type</Form.Label>
+                <Form.Label className="fw-bold">Select Room Type *</Form.Label>
                 <Form.Select
                   value={selectedRoomType}
                   onChange={e => setSelectedRoomType(e.target.value)}
                   required
+                  disabled={bookingLoading}
                 >
                   <option value="">Choose...</option>
                   {availableRoomTypes.map(r => (
@@ -407,22 +443,31 @@ function HostelDetails({ isLoggedIn }) {
               </Form.Group>
 
               <Form.Group className="mb-4">
-                <Form.Label className="fw-bold">Preferred Check-in Date</Form.Label>
+                <Form.Label className="fw-bold">Preferred Check-in Date *</Form.Label>
                 <Form.Control
                   type="date"
                   value={checkInDate}
                   onChange={e => setCheckInDate(e.target.value)}
                   min={new Date().toISOString().split('T')[0]}
                   required
+                  disabled={bookingLoading}
                 />
+                <Form.Text className="text-muted">
+                  Can be today or future date (server may take 30–120s on first try)
+                </Form.Text>
               </Form.Group>
 
               <Alert variant="info" className="mb-4">
-                <strong>Important:</strong> Your booking will be pending until the owner confirms it.
+                <strong>Important:</strong> Request will be pending until owner confirms
               </Alert>
 
               <div className="d-flex justify-content-end gap-3">
-                <Button variant="secondary" type="button" onClick={() => setShowBookingModal(false)}>
+                <Button 
+                  variant="secondary" 
+                  type="button" 
+                  onClick={() => setShowBookingModal(false)}
+                  disabled={bookingLoading}
+                >
                   Cancel
                 </Button>
                 <Button
@@ -433,7 +478,7 @@ function HostelDetails({ isLoggedIn }) {
                   {bookingLoading ? (
                     <>
                       <Spinner as="span" animation="border" size="sm" className="me-2" />
-                      Processing...
+                      Sending request...
                     </>
                   ) : (
                     'Confirm Booking'
@@ -457,6 +502,7 @@ function HostelDetails({ isLoggedIn }) {
                 <Button
                   variant="outline-primary"
                   onClick={() => setShowReviewForm(!showReviewForm)}
+                  disabled={bookingLoading}
                 >
                   <i className="bi bi-plus-circle me-2"></i>
                   Write Review
@@ -474,6 +520,7 @@ function HostelDetails({ isLoggedIn }) {
                       <Form.Select
                         value={reviewRating}
                         onChange={e => setReviewRating(Number(e.target.value))}
+                        disabled={bookingLoading}
                       >
                         {[5, 4, 3, 2, 1].map(r => (
                           <option key={r} value={r}>{r} Stars</option>
@@ -489,10 +536,15 @@ function HostelDetails({ isLoggedIn }) {
                         value={reviewComment}
                         onChange={e => setReviewComment(e.target.value)}
                         placeholder="Share your honest feedback..."
+                        disabled={bookingLoading}
                       />
                     </Form.Group>
 
-                    <Button variant="primary" onClick={handleSubmitReview}>
+                    <Button 
+                      variant="primary" 
+                      onClick={handleSubmitReview}
+                      disabled={bookingLoading}
+                    >
                       Submit Review
                     </Button>
                   </Form>
