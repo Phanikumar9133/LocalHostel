@@ -49,7 +49,7 @@ router.get('/my-hostels', protect, ownerOnly, async (req, res) => {
     const ownerIdString = req.user._id.toString();
     console.log(`[HOSTEL MY] Fetching hostels for owner: ${ownerIdString}`);
 
-    // 2. Convert string ID to ObjectId (critical fix for matching)
+    // CRITICAL FIX: Convert string ID to ObjectId (must match DB type)
     let ownerObjectId;
     try {
       ownerObjectId = new mongoose.Types.ObjectId(ownerIdString);
@@ -61,24 +61,24 @@ router.get('/my-hostels', protect, ownerOnly, async (req, res) => {
       });
     }
 
-    // 3. Query hostels - use ObjectId for correct matching
+    // 2. Query hostels using ObjectId
     const hostels = await Hostel.find({ owner: ownerObjectId })
       .sort({ createdAt: -1 })     // newest first
       .lean();                     // faster + plain objects
 
     console.log(`[HOSTEL MY] Found ${hostels.length} hostels for owner ${ownerIdString}`);
 
-    // Optional: log basic info for debugging (remove in production if too verbose)
+    // Debug: show first hostel details
     if (hostels.length > 0) {
-      console.log('[HOSTEL MY] First hostel:', {
-        id: hostels[0]._id,
+      console.log('[HOSTEL MY] First hostel details:', {
+        id: hostels[0]._id.toString(),
         name: hostels[0].name,
-        owner: hostels[0].owner?.toString(),
-        seats: hostels[0].availableSeats
+        ownerId: hostels[0].owner.toString(),
+        availableSeats: hostels[0].availableSeats
       });
     }
 
-    // 4. Send clean, consistent response
+    // 3. Send clean response
     return res.status(200).json({
       success: true,
       count: hostels.length,
