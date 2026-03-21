@@ -1,3 +1,4 @@
+// routes/hostelRoutes.js
 const express = require('express');
 const mongoose = require('mongoose');
 const { protect, ownerOnly } = require('../middleware/authMiddleware');
@@ -13,88 +14,58 @@ const uploadHostelImages = require('../middleware/upload');
 const router = express.Router();
 
 // ────────────────────────────────────────────────────────────────────────────────
-// PUBLIC ROUTES - Anyone can access these (no auth required)
+// PUBLIC ROUTES
 // ────────────────────────────────────────────────────────────────────────────────
-router.get('/', getAllHostels);              // List all hostels (public)
-router.get('/:id', getHostelById);           // Get single hostel by ID (public)
+router.get('/', getAllHostels);
+router.get('/:id', getHostelById);
 
 // ────────────────────────────────────────────────────────────────────────────────
-// PROTECTED ROUTES - Only authenticated owners
+// PROTECTED – OWNER ONLY
 // ────────────────────────────────────────────────────────────────────────────────
-
-// Create hostel (with image upload)
 router.post('/', protect, ownerOnly, uploadHostelImages, createHostel);
-
-// Update hostel (with optional new images)
 router.put('/:id', protect, ownerOnly, uploadHostelImages, updateHostel);
-
-// Delete hostel
 router.delete('/:id', protect, ownerOnly, deleteHostel);
 
-// ────────────────────────────────────────────────────────────────────────────────
-// OWNER-SPECIFIC PROTECTED ROUTE: Get ONLY this owner's hostels
-// This is the route your frontend dashboard should call: /api/hostels/my-hostels
-// ────────────────────────────────────────────────────────────────────────────────
+// Get my hostels – FIXED VERSION
 router.get('/my-hostels', protect, ownerOnly, async (req, res) => {
   try {
-    // 1. Safety check - ensure authenticated user
-    if (!req.user || !req.user._id) {
-      console.log('[HOSTEL MY] No authenticated user in request');
-      return res.status(401).json({
-        success: false,
-        message: 'Unauthorized - please login again'
-      });
-    }
+    const ownerId = req.user._id;
 
-    const ownerIdString = req.user._id.toString();
-    console.log(`[HOSTEL MY] Fetching hostels for owner: ${ownerIdString}`);
+    console.log(`[HOSTEL MY] Fetching hostels for owner: ${ownerId}`);
 
-    // CRITICAL FIX: Convert string ID to ObjectId (must match DB type)
-    let ownerObjectId;
-    try {
-      ownerObjectId = new mongoose.Types.ObjectId(ownerIdString);
-    } catch (idErr) {
-      console.error('[HOSTEL MY] Invalid owner ID format:', idErr.message);
-      return res.status(400).json({
-        success: false,
-        message: 'Invalid owner ID format'
-      });
-    }
+    const hostels = await Hostel.find({ owner: ownerId })
+      .sort({ createdAt: -1 })
+      .lean();
 
-    // 2. Query hostels using ObjectId
-    const hostels = await Hostel.find({ owner: ownerObjectId })
-      .sort({ createdAt: -1 })     // newest first
-      .lean();                     // faster + plain objects
+    console.log(`[HOSTEL MY] Found ${hostels.length} hostels`);
 
-    console.log(`[HOSTEL MY] Found ${hostels.length} hostels for owner ${ownerIdString}`);
-
-    // Debug: show first hostel details
+    // Optional: minimal debug of first hostel
     if (hostels.length > 0) {
-      console.log('[HOSTEL MY] First hostel details:', {
-        id: hostels[0]._id.toString(),
+      console.log('[HOSTEL MY] First hostel sample:', {
+        _id: hostels[0]._id.toString(),
         name: hostels[0].name,
-        ownerId: hostels[0].owner.toString(),
+        owner: hostels[0].owner.toString(),
         availableSeats: hostels[0].availableSeats
       });
     }
 
-    // 3. Send clean response
     return res.status(200).json({
       success: true,
       count: hostels.length,
       hostels
     });
   } catch (error) {
-    console.error('[HOSTEL MY] CRASH:', {
+    console.error('[HOSTEL MY] ERROR:', {
       message: error.message,
       name: error.name,
-      stack: error.stack?.substring(0, 500)
+      stack: error.stack?.substring(0, 500) || 'no stack'
     });
 
     return res.status(500).json({
       success: false,
-      message: 'Server error while fetching your hostels',
-      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+      message: 'Failed to fetch your hostels',
+      errorType: error.name,
+      detail: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }
 });
