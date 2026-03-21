@@ -1,11 +1,11 @@
+const mongoose = require('mongoose');
 const Booking = require('../models/Booking');
 const Hostel = require('../models/Hostel');
-const mongoose = require('mongoose');
 const { sendBookingNotification } = require('../utils/sendEmail');
 
 exports.createBooking = async (req, res) => {
   try {
-    console.log('[BOOKING CREATE] User:', req.user?._id, req.user?.name || '(no name)');
+    console.log('[BOOKING CREATE] User:', req.user?._id?.toString(), req.user?.name || '(no name)');
     console.log('[BOOKING CREATE] Payload:', req.body);
 
     const { hostel, roomType, checkInDate } = req.body;
@@ -13,7 +13,7 @@ exports.createBooking = async (req, res) => {
     if (!hostel || !roomType || !checkInDate) {
       return res.status(400).json({
         success: false,
-        message: 'Hostel ID, room type, and check-in date are required',
+        message: 'Hostel ID, room type, and check-in date are required'
       });
     }
 
@@ -29,11 +29,11 @@ exports.createBooking = async (req, res) => {
       return res.status(400).json({ success: false, message: 'Check-in date cannot be in the past' });
     }
 
-    // Fetch hostel with owner populated
-    const hostelDoc = await Hostel.findById(hostel).populate('owner', 'email name');
+    // Fetch hostel with minimal population
+    const hostelDoc = await Hostel.findById(hostel).populate('owner', 'email name').lean();
 
     if (!hostelDoc) {
-      console.log('[BOOKING CREATE] Hostel not found:', hostel);
+      console.log('[BOOKING CREATE] Hostel not found ID:', hostel);
       return res.status(404).json({ success: false, message: 'Hostel not found' });
     }
 
@@ -41,10 +41,10 @@ exports.createBooking = async (req, res) => {
 
     const room = hostelDoc.rooms.find(r => r.type === roomType);
     if (!room) {
-      console.log('[BOOKING CREATE] Room type not found. Requested:', roomType, 'Available types:', hostelDoc.rooms.map(r => r.type));
+      console.log('[BOOKING CREATE] Room type not found. Requested:', roomType);
       return res.status(400).json({
         success: false,
-        message: `Room type "${roomType}" not available in this hostel`,
+        message: `Room type "${roomType}" not available`
       });
     }
 
@@ -54,59 +54,65 @@ exports.createBooking = async (req, res) => {
     if (available <= 0) {
       return res.status(400).json({
         success: false,
-        message: 'No seats available for this room type right now',
+        message: 'No seats available for this room type'
       });
     }
 
     const booking = await Booking.create({
       user: req.user._id,
-      hostel: hostel,
+      hostel,
       roomType,
       checkInDate: checkIn,
       price: room.price,
-      status: 'Pending',
+      status: 'Pending'
     });
 
-    console.log('[BOOKING CREATE] Created booking ID:', booking._id);
+    console.log('[BOOKING CREATE] Created booking ID:', booking._id.toString());
 
-    // Send notification email (safe check)
+    // Non-blocking email send
     if (hostelDoc.owner?.email) {
-      try {
-        await sendBookingNotification(hostelDoc.owner.email, {
-          bookingId: booking._id.toString(),
-          studentName: req.user.name || 'A Student',
-          hostelName: hostelDoc.name,
-          roomType: booking.roomType,
-          checkInDate: booking.checkInDate.toLocaleDateString(),
-          price: booking.price,
-          status: booking.status,
-        });
-        console.log('[BOOKING CREATE] Notification email queued');
-      } catch (emailErr) {
-        console.warn('[BOOKING CREATE] Email send failed:', emailErr.message);
-      }
+      sendBookingNotification(hostelDoc.owner.email, {
+        bookingId: booking._id.toString(),
+        studentName: req.user.name || 'A Student',
+        hostelName: hostelDoc.name,
+        roomType,
+        checkInDate: checkIn.toLocaleDateString(),
+        price: booking.price,
+        status: booking.status
+      })
+        .then(() => console.log('[BOOKING CREATE] Email queued successfully'))
+        .catch(emailErr => console.warn('[BOOKING CREATE] Email failed:', emailErr.message));
     } else {
-      console.warn('[BOOKING CREATE] No owner email found for hostel:', hostelDoc._id);
+      console.warn('[BOOKING CREATE] No owner email for hostel:', hostelDoc._id);
     }
 
     return res.status(201).json({
       success: true,
-      message: 'Booking request sent successfully. Waiting for owner approval.',
-      booking,
+      message: 'Booking request sent. Waiting for owner approval.',
+      booking
     });
   } catch (error) {
-    console.error('[BOOKING CREATE] CRASH:', error.name, error.message, error.stack?.substring(0, 500));
+    console.error('[BOOKING CREATE] CRASH:', {
+      message: error.message,
+      name: error.name,
+      stack: error.stack?.substring(0, 500)
+    });
+
     return res.status(500).json({
       success: false,
-      message: 'Server error while creating booking',
-      error: process.env.NODE_ENV === 'development' ? error.message : undefined,
+      message: 'Server error creating booking',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }
 };
 
 exports.getUserBookings = async (req, res) => {
   try {
-    console.log('[BOOKING USER] Fetching bookings for user:', req.user?._id);
+    if (!req.user?._id) {
+      return res.status(401).json({ success: false, message: 'Unauthorized' });
+    }
+
+    console.log('[BOOKING USER] Fetching for user:', req.user._id.toString());
 
     const bookings = await Booking
       .find({ user: req.user._id })
@@ -119,14 +125,14 @@ exports.getUserBookings = async (req, res) => {
     return res.json({
       success: true,
       count: bookings.length,
-      bookings,
+      bookings
     });
   } catch (error) {
     console.error('[BOOKING USER] ERROR:', error.message, error.stack?.substring(0, 300));
     return res.status(500).json({
       success: false,
-      message: 'Server error while fetching your bookings',
-      error: process.env.NODE_ENV === 'development' ? error.message : undefined,
+      message: 'Server error fetching bookings',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }
 };
@@ -134,38 +140,59 @@ exports.getUserBookings = async (req, res) => {
 exports.getOwnerBookings = async (req, res) => {
   try {
     if (!req.user || !req.user._id) {
-      console.log('[BOOKING OWNER] No authenticated user in request');
-      return res.status(401).json({ success: false, message: 'Unauthorized - please login' });
+      console.log('[BOOKING OWNER] No authenticated user');
+      return res.status(401).json({ success: false, message: 'Unauthorized' });
     }
 
-    console.log('[BOOKING OWNER] Fetching bookings for owner:', req.user._id);
+    const ownerIdStr = req.user._id.toString();
+    console.log('[BOOKING OWNER] Owner ID:', ownerIdStr);
 
-    // Find all hostels owned by this user
-    const ownedHostels = await Hostel.find({ owner: req.user._id }).select('_id').lean();
+    // Convert to ObjectId (critical fix)
+    let ownerObjectId;
+    try {
+      ownerObjectId = new mongoose.Types.ObjectId(ownerIdStr);
+    } catch (convErr) {
+      console.error('[BOOKING OWNER] Invalid owner ID:', convErr.message);
+      return res.status(400).json({ success: false, message: 'Invalid owner ID' });
+    }
+
+    // Find owned hostels
+    const ownedHostels = await Hostel.find({ owner: ownerObjectId })
+      .select('_id')
+      .lean();
+
     const hostelIds = ownedHostels.map(h => h._id);
+    console.log('[BOOKING OWNER] Found', hostelIds.length, 'owned hostels');
 
-    console.log('[BOOKING OWNER] Owner controls', hostelIds.length, 'hostels');
+    if (hostelIds.length === 0) {
+      return res.json({ success: true, count: 0, bookings: [] });
+    }
 
     const bookings = await Booking
       .find({ hostel: { $in: hostelIds } })
-      .populate('user', 'name email phone')     // safe fields
-      .populate('hostel', 'name location type') // safe fields
+      .populate('user', 'name email phone')
+      .populate('hostel', 'name location type')
       .sort({ createdAt: -1 })
-      .lean(); // faster, avoids mongoose document overhead
+      .lean();
 
     console.log('[BOOKING OWNER] Found bookings:', bookings.length);
 
     return res.json({
       success: true,
       count: bookings.length,
-      bookings,
+      bookings
     });
   } catch (error) {
-    console.error('[BOOKING OWNER] CRASH:', error.name, error.message, error.stack?.substring(0, 500));
+    console.error('[BOOKING OWNER] CRASH:', {
+      message: error.message,
+      name: error.name,
+      stack: error.stack?.substring(0, 500)
+    });
+
     return res.status(500).json({
       success: false,
-      message: 'Server error while fetching owner bookings',
-      error: process.env.NODE_ENV === 'development' ? error.message : undefined,
+      message: 'Server error fetching owner bookings',
+      error: process.env.NODE_ENV === 'development' ? error.message : 'Internal error'
     });
   }
 };
@@ -177,7 +204,7 @@ exports.updateBookingStatus = async (req, res) => {
     if (!status || !['Confirmed', 'Rejected'].includes(status)) {
       return res.status(400).json({
         success: false,
-        message: 'Invalid status. Use "Confirmed" or "Rejected"',
+        message: 'Invalid status. Must be "Confirmed" or "Rejected"'
       });
     }
 
@@ -191,15 +218,14 @@ exports.updateBookingStatus = async (req, res) => {
       return res.status(404).json({ success: false, message: 'Hostel not found' });
     }
 
-    // Security check
     if (hostel.owner.toString() !== req.user._id.toString()) {
-      return res.status(403).json({ success: false, message: 'You are not the owner of this hostel' });
+      return res.status(403).json({ success: false, message: 'Not authorized - not hostel owner' });
     }
 
     if (booking.status === 'Confirmed' || booking.status === 'Rejected') {
       return res.status(400).json({
         success: false,
-        message: `This booking is already ${booking.status.toLowerCase()}`,
+        message: `Booking already ${booking.status.toLowerCase()}`
       });
     }
 
@@ -208,29 +234,33 @@ exports.updateBookingStatus = async (req, res) => {
       return res.status(400).json({ success: false, message: 'Room type not found in hostel' });
     }
 
-    // Update occupancy only if confirming
     if (status === 'Confirmed') {
       room.occupied = Number(room.occupied || 0) + 1;
       hostel.availableSeats = Math.max(0, Number(hostel.availableSeats || 0) - 1);
-      await hostel.save({ validateBeforeSave: false }); // skip some validations for speed
+      await hostel.save({ validateBeforeSave: false });
     }
 
     booking.status = status;
     await booking.save();
 
-    console.log('[BOOKING UPDATE] Status changed to', status, 'for booking:', booking._id);
+    console.log('[BOOKING UPDATE] Status updated to', status, 'for booking:', booking._id.toString());
 
     return res.json({
       success: true,
       message: `Booking ${status.toLowerCase()} successfully`,
-      booking,
+      booking
     });
   } catch (error) {
-    console.error('[BOOKING UPDATE] CRASH:', error.name, error.message, error.stack?.substring(0, 500));
+    console.error('[BOOKING UPDATE] CRASH:', {
+      message: error.message,
+      name: error.name,
+      stack: error.stack?.substring(0, 500)
+    });
+
     return res.status(500).json({
       success: false,
-      message: 'Server error while updating booking',
-      error: process.env.NODE_ENV === 'development' ? error.message : undefined,
+      message: 'Server error updating booking',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }
 };
