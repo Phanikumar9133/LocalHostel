@@ -4,7 +4,6 @@ const { protect, ownerOnly } = require('../middleware/authMiddleware');
 const {
   createBooking,
   getUserBookings,
-  getOwnerBookings,           // ← assuming you export this
   updateBookingStatus,
 } = require('../controllers/bookingController');
 
@@ -13,29 +12,42 @@ const Booking = require('../models/Booking');
 
 const router = express.Router();
 
+// Student creates booking
 router.post('/', protect, createBooking);
+
+// Student sees own bookings
 router.get('/user', protect, getUserBookings);
 
-// FIXED /owner route – use req.user._id directly
+// Owner sees bookings for THEIR hostels - FIXED & DEBUG VERSION
 router.get('/owner', protect, ownerOnly, async (req, res) => {
   try {
     const ownerId = req.user._id;
-    console.log(`[BOOKING OWNER] Fetching for owner: ${ownerId}`);
 
-    // Find all hostels owned by this user
+    console.log('══════════════════════════════════════════════════════════════');
+    console.log('[OWNER-BOOKINGS] Request from owner:');
+    console.log('  • User _id:', ownerId.toString());
+    console.log('  • Email:', req.user.email || 'missing');
+    console.log('══════════════════════════════════════════════════════════════');
+
+    // Find hostels owned by this user
     const myHostels = await Hostel.find({ owner: ownerId })
-      .select('_id')
+      .select('_id name')
       .lean();
 
     const hostelIds = myHostels.map(h => h._id);
 
-    console.log(`[BOOKING OWNER] Owner controls ${myHostels.length} hostels → ${hostelIds.length} IDs`);
+    console.log('[OWNER-BOOKINGS] Owner controls:', myHostels.length, 'hostels');
+    console.log('[OWNER-BOOKINGS] Hostel IDs:', hostelIds.map(id => id.toString()));
 
     if (hostelIds.length === 0) {
-      return res.json({ success: true, count: 0, bookings: [] });
+      return res.status(200).json({
+        success: true,
+        count: 0,
+        bookings: [],
+        message: 'No hostels found for this owner'
+      });
     }
 
-    // Fetch bookings only for those hostels
     const bookings = await Booking
       .find({ hostel: { $in: hostelIds } })
       .populate('user', 'name email phone')
@@ -43,29 +55,28 @@ router.get('/owner', protect, ownerOnly, async (req, res) => {
       .sort({ createdAt: -1 })
       .lean();
 
-    console.log(`[BOOKING OWNER] Found ${bookings.length} bookings`);
+    console.log('[OWNER-BOOKINGS] Found bookings:', bookings.length);
 
-    return res.json({
+    res.status(200).json({
       success: true,
       count: bookings.length,
-      bookings
+      bookings,
+      debug: {
+        ownedHostelCount: myHostels.length,
+        hostelIdsCount: hostelIds.length
+      }
     });
   } catch (error) {
-    console.error('[BOOKING OWNER] ERROR:', {
-      message: error.message,
-      name: error.name,
-      stack: error.stack?.substring(0, 500) || 'no stack'
-    });
-
-    return res.status(500).json({
+    console.error('[OWNER-BOOKINGS] ERROR:', error.message, error.stack?.substring(0, 500));
+    res.status(500).json({
       success: false,
       message: 'Failed to fetch owner bookings',
-      errorType: error.name,
-      detail: process.env.NODE_ENV === 'development' ? error.message : undefined
+      error: process.env.NODE_ENV === 'development' ? error.message : 'Internal error'
     });
   }
 });
 
+// Update booking status (accept/reject)
 router.put('/:id/status', protect, ownerOnly, updateBookingStatus);
 
 module.exports = router;
