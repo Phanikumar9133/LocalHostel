@@ -12,27 +12,21 @@ const app = express();
 connectDB();
 
 // ────────────────────────────────────────────────────────────────────────────────
-// CORS CONFIGURATION - FIXED & EXPLICIT
-// Allows localhost during development + your future deployed frontend
-// Handles preflight OPTIONS requests properly
+// CORS - FIXED & EXPLICIT (no app.options('*') needed)
 // ────────────────────────────────────────────────────────────────────────────────
 const allowedOrigins = [
-  'http://localhost:5173',              // Vite dev server
-  'http://localhost:3000',              // fallback for other local setups
-  // Add your deployed frontend URL(s) here later, e.g.:
-  // 'https://your-hostelhub-frontend.vercel.app',
-  // 'https://your-hostelhub-frontend.netlify.app',
+  'http://localhost:5173',              // Vite dev
+  'http://localhost:3000',              // fallback
+  // Add your deployed frontend later, e.g.:
+  // 'https://your-hostelhub-frontend.vercel.app'
 ];
-
-// For quick testing you can temporarily use '*' (less secure)
-// const allowedOrigins = '*';
 
 app.use(cors({
   origin: function (origin, callback) {
-    // Allow requests with no origin (like mobile apps, curl, Postman)
+    // Allow no-origin requests (Postman, curl, mobile apps, etc.)
     if (!origin) return callback(null, true);
 
-    if (allowedOrigins.indexOf(origin) !== -1 || allowedOrigins === '*') {
+    if (allowedOrigins.includes(origin) || allowedOrigins.includes('*')) {
       callback(null, true);
     } else {
       callback(new Error('Not allowed by CORS'));
@@ -40,11 +34,8 @@ app.use(cors({
   },
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
-  credentials: true,                    // Optional: enable if you add cookies later
+  credentials: true,
 }));
-
-// Handle preflight OPTIONS requests explicitly (helps on Render/Cloudflare)
-app.options('*', cors());
 
 // Other middleware
 app.use(express.json());
@@ -63,7 +54,7 @@ app.get('/', (req, res) => {
   res.send('HostelHub API is running successfully! 🚀');
 });
 
-// Test email route (keep for debugging)
+// Test email route
 app.get('/api/test-email', async (req, res) => {
   try {
     const testOwnerEmail = "phanikumarpotharlanka1432@gmail.com";
