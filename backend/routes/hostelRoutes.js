@@ -9,20 +9,19 @@ const {
   deleteHostel
 } = require('../controllers/hostelController');
 const uploadHostelImages = require('../middleware/upload');
+const Hostel = require('../models/Hostel');  // ← ADD THIS LINE (missing import!)
 
 const router = express.Router();
 
-// ────────────────────────────────────────────────────────────────────────────────
-// PUBLIC ROUTES (no auth)
-// ────────────────────────────────────────────────────────────────────────────────
-router.get('/', getAllHostels);                    // GET /api/hostels
+// PUBLIC ROUTES
+router.get('/', getAllHostels);
+router.get('/:id', getHostelById);
 
-// ────────────────────────────────────────────────────────────────────────────────
-// PROTECTED OWNER ROUTES (specific before parameterized)
-// ────────────────────────────────────────────────────────────────────────────────
+// PROTECTED OWNER ROUTES - specific before parameterized
 router.get('/my-hostels', protect, ownerOnly, async (req, res) => {
   try {
     const ownerId = req.user._id;
+
     console.log('[MY-HOSTELS] Querying for owner:', ownerId.toString());
 
     const hostels = await Hostel.find({ owner: ownerId })
@@ -45,8 +44,6 @@ router.get('/my-hostels', protect, ownerOnly, async (req, res) => {
     });
   }
 });
-
-router.get('/:id', getHostelById);                 // GET /api/hostels/:id  ← AFTER /my-hostels
 
 router.post('/', protect, ownerOnly, uploadHostelImages, createHostel);
 router.put('/:id', protect, ownerOnly, uploadHostelImages, updateHostel);
