@@ -1,3 +1,5 @@
+// controllers/hostelController.js
+const mongoose = require('mongoose');
 const Hostel = require('../models/Hostel');
 
 exports.getAllHostels = async (req, res) => {
@@ -19,26 +21,36 @@ exports.getAllHostels = async (req, res) => {
 
     const hostels = await Hostel.find(filter)
       .populate('owner', 'name email phone role')
-      .lean(); // faster, removes mongoose methods
+      .lean();
 
-    res.json({
+    return res.status(200).json({
       success: true,
       count: hostels.length,
       hostels,
     });
   } catch (error) {
-    console.error('Get All Hostels Error:', error);
-    res.status(500).json({
+    console.error('Get All Hostels Error:', error.message);
+    return res.status(500).json({
       success: false,
       message: 'Server error while fetching hostels',
-      error: error.message,
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined,
     });
   }
 };
 
 exports.getHostelById = async (req, res) => {
   try {
-    const hostel = await Hostel.findById(req.params.id)
+    const { id } = req.params;
+
+    // Prevent CastError early
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid hostel ID format',
+      });
+    }
+
+    const hostel = await Hostel.findById(id)
       .populate('owner', 'name email phone role')
       .lean();
 
@@ -49,16 +61,16 @@ exports.getHostelById = async (req, res) => {
       });
     }
 
-    res.json({
+    return res.status(200).json({
       success: true,
       hostel,
     });
   } catch (error) {
-    console.error('Get Hostel By ID Error:', error);
-    res.status(500).json({
+    console.error('Get Hostel By ID Error:', error.message);
+    return res.status(500).json({
       success: false,
-      message: 'Server error',
-      error: error.message,
+      message: 'Server error while fetching hostel',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined,
     });
   }
 };
@@ -67,11 +79,11 @@ exports.createHostel = async (req, res) => {
   try {
     const { name, location, type, price, facilities, rooms } = req.body;
 
-    // Basic required field validation
+    // Required fields validation
     if (!name || !location || !type || !price) {
       return res.status(400).json({
         success: false,
-        message: 'Name, location, type and price are required',
+        message: 'Name, location, type, and price are required',
       });
     }
 
@@ -82,18 +94,20 @@ exports.createHostel = async (req, res) => {
       });
     }
 
+    // Process images
     const images = req.files.map(file => file.path);
 
+    // Parse arrays safely
     let parsedFacilities = [];
     let parsedRooms = [];
 
     try {
       parsedFacilities = facilities ? JSON.parse(facilities) : [];
       parsedRooms = rooms ? JSON.parse(rooms) : [];
-    } catch (err) {
+    } catch {
       return res.status(400).json({
         success: false,
-        message: 'Invalid JSON format in facilities or rooms field',
+        message: 'Invalid JSON format in facilities or rooms',
       });
     }
 
@@ -104,6 +118,7 @@ exports.createHostel = async (req, res) => {
       });
     }
 
+    // Calculate total available seats
     const availableSeats = parsedRooms.reduce((sum, room) => {
       const total = Number(room.totalSeats) || 0;
       const occupied = Number(room.occupied) || 0;
@@ -122,17 +137,17 @@ exports.createHostel = async (req, res) => {
       availableSeats,
     });
 
-    res.status(201).json({
+    return res.status(201).json({
       success: true,
       message: 'Hostel created successfully',
       hostel,
     });
   } catch (error) {
-    console.error('Create Hostel Error:', error);
-    res.status(500).json({
+    console.error('Create Hostel Error:', error.message);
+    return res.status(500).json({
       success: false,
       message: 'Failed to create hostel',
-      error: error.message,
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined,
     });
   }
 };
@@ -147,7 +162,7 @@ exports.updateHostel = async (req, res) => {
       });
     }
 
-    // Authorization
+    // Authorization check
     const isOwner = hostel.owner.toString() === req.user._id.toString();
     const isAdmin = req.user.role === 'admin';
     if (!isOwner && !isAdmin) {
@@ -159,11 +174,13 @@ exports.updateHostel = async (req, res) => {
 
     const { name, location, type, price, facilities, rooms } = req.body;
 
+    // Update scalar fields safely
     if (name) hostel.name = name.trim();
     if (location) hostel.location = location.trim();
     if (type) hostel.type = type;
     if (price) hostel.price = Number(price);
 
+    // Update facilities safely
     if (facilities !== undefined) {
       try {
         hostel.facilities = JSON.parse(facilities);
@@ -176,23 +193,24 @@ exports.updateHostel = async (req, res) => {
       }
     }
 
+    // Update rooms + recalculate availableSeats
     if (rooms !== undefined) {
       try {
         hostel.rooms = JSON.parse(rooms);
         if (!Array.isArray(hostel.rooms)) throw new Error();
+
+        // Recalculate available seats
+        hostel.availableSeats = hostel.rooms.reduce((sum, room) => {
+          const total = Number(room.totalSeats) || 0;
+          const occupied = Number(room.occupied) || 0;
+          return sum + Math.max(0, total - occupied);
+        }, 0);
       } catch {
         return res.status(400).json({
           success: false,
           message: 'Invalid JSON format for rooms',
         });
       }
-
-      // Recalculate available seats when rooms are updated
-      hostel.availableSeats = hostel.rooms.reduce((sum, room) => {
-        const total = Number(room.totalSeats) || 0;
-        const occupied = Number(room.occupied) || 0;
-        return sum + Math.max(0, total - occupied);
-      }, 0);
     }
 
     // Add new images if uploaded
@@ -203,17 +221,17 @@ exports.updateHostel = async (req, res) => {
 
     await hostel.save();
 
-    res.json({
+    return res.status(200).json({
       success: true,
       message: 'Hostel updated successfully',
       hostel,
     });
   } catch (error) {
-    console.error('Update Hostel Error:', error);
-    res.status(500).json({
+    console.error('Update Hostel Error:', error.message);
+    return res.status(500).json({
       success: false,
       message: 'Failed to update hostel',
-      error: error.message,
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined,
     });
   }
 };
@@ -240,16 +258,16 @@ exports.deleteHostel = async (req, res) => {
 
     await Hostel.deleteOne({ _id: req.params.id });
 
-    res.json({
+    return res.status(200).json({
       success: true,
       message: 'Hostel deleted successfully',
     });
   } catch (error) {
-    console.error('Delete Hostel Error:', error);
-    res.status(500).json({
+    console.error('Delete Hostel Error:', error.message);
+    return res.status(500).json({
       success: false,
       message: 'Failed to delete hostel',
-      error: error.message,
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined,
     });
   }
 };
