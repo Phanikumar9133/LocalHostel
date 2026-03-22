@@ -24,46 +24,48 @@ router.delete('/:id', protect, ownerOnly, deleteHostel);
 // SPECIAL ROUTE - MY HOSTELS (must be BEFORE /:id to avoid conflict)
 router.get('/my-hostels', protect, ownerOnly, async (req, res) => {
   try {
-    console.log('=== MY-HOSTELS ROUTE HIT ===');
-    console.log('User ID:', req.user._id.toString());
-    console.log('Email:', req.user.email || 'missing');
+    // Log everything early
+    console.log('MY-HOSTELS START =====================================');
+    console.log('User ID from token:', req.user._id.toString());
+    console.log('User role:', req.user.role);
+    console.log('Model loaded:', !!Hostel); // true if model exists
 
     const ownerId = req.user._id;
 
-    // Quick count check
-    const count = await Hostel.countDocuments({ owner: ownerId });
-    console.log('MongoDB countDocuments:', count);
+    // Validate ID (prevents cast error)
+    if (!mongoose.Types.ObjectId.isValid(ownerId)) {
+      console.log('Invalid owner ID format');
+      return res.status(400).json({ success: false, message: 'Invalid user ID' });
+    }
 
-    // Full query
-    const hostels = await Hostel.find({ owner: ownerId })
-      .sort({ createdAt: -1 })
-      .lean();
+    // Use simple query – no complex options
+    const hostels = await Hostel.find({ owner: ownerId }).lean();
 
-    console.log('Hostels found:', hostels.length);
+    console.log('MY-HOSTELS FOUND:', hostels.length);
 
-    // Always send response - no way to miss it
     return res.status(200).json({
       success: true,
       count: hostels.length,
       hostels: hostels || [],
       debug: {
         ownerId: ownerId.toString(),
-        mongoCount: count,
-        foundLength: hostels.length
+        foundCount: hostels.length
       }
     });
   } catch (error) {
-    console.error('MY-HOSTELS CRASH:');
-    console.error('Error message:', error.message);
+    console.error('MY-HOSTELS CRASH =====================================');
     console.error('Error name:', error.name);
-    console.error('Stack trace:', error.stack?.substring(0, 800) || 'no stack');
+    console.error('Error message:', error.message);
+    console.error('Stack:', error.stack?.substring(0, 800) || 'no stack');
 
     return res.status(500).json({
       success: false,
-      message: 'Failed to load your hostels',
+      message: 'Failed to fetch your hostels',
       errorType: error.name,
-      errorDetail: process.env.NODE_ENV === 'development' ? error.message : 'Server error'
+      errorDetail: error.message
     });
+  } finally {
+    console.log('MY-HOSTELS END =====================================');
   }
 });
 
