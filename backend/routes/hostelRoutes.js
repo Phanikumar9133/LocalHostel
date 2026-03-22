@@ -24,27 +24,45 @@ router.delete('/:id', protect, ownerOnly, deleteHostel);
 // SPECIAL ROUTE - MY HOSTELS (must be BEFORE /:id to avoid conflict)
 router.get('/my-hostels', protect, ownerOnly, async (req, res) => {
   try {
+    console.log('=== MY-HOSTELS ROUTE HIT ===');
+    console.log('User ID:', req.user._id.toString());
+    console.log('Email:', req.user.email || 'missing');
+
     const ownerId = req.user._id;
 
-    console.log('[MY-HOSTELS] Owner querying:', ownerId.toString());
+    // Quick count check
+    const count = await Hostel.countDocuments({ owner: ownerId });
+    console.log('MongoDB countDocuments:', count);
 
+    // Full query
     const hostels = await Hostel.find({ owner: ownerId })
       .sort({ createdAt: -1 })
       .lean();
 
-    console.log('[MY-HOSTELS] Found:', hostels.length);
+    console.log('Hostels found:', hostels.length);
 
-    res.status(200).json({
+    // Always send response - no way to miss it
+    return res.status(200).json({
       success: true,
       count: hostels.length,
-      hostels
+      hostels: hostels || [],
+      debug: {
+        ownerId: ownerId.toString(),
+        mongoCount: count,
+        foundLength: hostels.length
+      }
     });
   } catch (error) {
-    console.error('[MY-HOSTELS ERROR]', error.message);
-    res.status(500).json({
+    console.error('MY-HOSTELS CRASH:');
+    console.error('Error message:', error.message);
+    console.error('Error name:', error.name);
+    console.error('Stack trace:', error.stack?.substring(0, 800) || 'no stack');
+
+    return res.status(500).json({
       success: false,
-      message: 'Failed to fetch your hostels',
-      error: error.message
+      message: 'Failed to load your hostels',
+      errorType: error.name,
+      errorDetail: process.env.NODE_ENV === 'development' ? error.message : 'Server error'
     });
   }
 });
