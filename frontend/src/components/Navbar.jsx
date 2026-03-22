@@ -21,7 +21,7 @@ function Navbar({ isLoggedIn, userRole, handleLogout }) {
         {/* Logo */}
         <BSNavbar.Brand as={Link} to="/">
           <img
-            src="/src/assets/hotel.png"
+            src="/assets/hotel.png"
             alt="HostelHub"
             height="48"
             className="d-inline-block align-top"
