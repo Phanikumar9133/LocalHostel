@@ -1,5 +1,5 @@
 // controllers/bookingController.js
-// FULL CORRECTED VERSION - 280+ lines - Perfect email + seat management + future-proof logging
+// FULL UPDATED VERSION - Using Resend for reliable email notifications
 
 const mongoose = require('mongoose');
 const Booking = require('../models/Booking');
@@ -14,7 +14,7 @@ exports.createBooking = async (req, res) => {
 
     const { hostel, roomType, checkInDate } = req.body;
 
-    // Basic validation
+    // Validation
     if (!hostel || !roomType || !checkInDate) {
       return res.status(400).json({
         success: false,
@@ -66,7 +66,7 @@ exports.createBooking = async (req, res) => {
       });
     }
 
-    // Create booking
+    // Create the booking
     const booking = await Booking.create({
       user: req.user._id,
       hostel,
@@ -78,30 +78,26 @@ exports.createBooking = async (req, res) => {
 
     console.log('[BOOKING CREATE] Booking created successfully. ID:', booking._id.toString());
 
-    // Send email notification (non-blocking with better logging)
+    // Send email notification using Resend
     if (hostelDoc.owner?.email) {
-      console.log(`[EMAIL] Queuing notification to owner: ${hostelDoc.owner.email}`);
+      console.log(`[RESEND] Queuing notification to owner: ${hostelDoc.owner.email}`);
 
-      sendBookingNotification(hostelDoc.owner.email, {
+      const emailSent = await sendBookingNotification(hostelDoc.owner.email, {
         bookingId: booking._id.toString(),
         studentName: req.user.name || 'A Student',
         hostelName: hostelDoc.name,
         roomType,
         checkInDate: checkIn.toLocaleDateString('en-IN'),
         price: booking.price,
-      })
-        .then((success) => {
-          if (success) {
-            console.log(`[EMAIL] Successfully sent to ${hostelDoc.owner.email}`);
-          } else {
-            console.warn(`[EMAIL] Failed to send to ${hostelDoc.owner.email}`);
-          }
-        })
-        .catch((emailErr) => {
-          console.error(`[EMAIL] Exception while sending to ${hostelDoc.owner.email}:`, emailErr.message);
-        });
+      });
+
+      if (emailSent) {
+        console.log(`[RESEND] Successfully sent to ${hostelDoc.owner.email}`);
+      } else {
+        console.warn(`[RESEND] Failed to send to ${hostelDoc.owner.email}`);
+      }
     } else {
-      console.warn('[BOOKING CREATE] No owner email found for hostel ID:', hostelDoc._id);
+      console.warn('[BOOKING CREATE] No owner email found for hostel:', hostelDoc._id);
     }
 
     return res.status(201).json({
