@@ -3,6 +3,8 @@ const nodemailer = require('nodemailer');
 
 const sendBookingNotification = async (ownerEmail, bookingData) => {
   try {
+    console.log(`[EMAIL] Starting to send notification to: ${ownerEmail}`);
+
     const transporter = nodemailer.createTransport({
       service: 'gmail',
       secure: true,
@@ -10,17 +12,24 @@ const sendBookingNotification = async (ownerEmail, bookingData) => {
         user: process.env.EMAIL_USER,
         pass: process.env.EMAIL_PASS.replace(/\s+/g, ''),
       },
+      tls: {
+        rejectUnauthorized: false   // Helps with Render/Gmail connection issues
+      },
+      // Increase timeout to handle cold starts on Render
+      connectionTimeout: 10000,
+      socketTimeout: 15000
     });
 
-    const bookingLink = `${process.env.FRONTEND_URL || 'http://localhost:5173'}/owner-dashboard`;
+    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+    const bookingLink = `${frontendUrl}/owner-dashboard`;
 
     const mailOptions = {
       from: `"HostelHub Booking Alert" <${process.env.EMAIL_USER}>`,
       to: ownerEmail,
       subject: `New Booking Request - ${bookingData.hostelName || 'Your Hostel'}`,
       html: `
-        <div style="font-family: Arial, Helvetica, sans-serif; max-width: 600px; margin: 0 auto; padding: 30px; border: 1px solid #e0e0e0; border-radius: 12px; background: #ffffff;">
-          <h2 style="color: #00b894; text-align: center; margin-bottom: 20px;">New Booking Request!</h2>
+        <div style="font-family: Arial, Helvetica, sans-serif; max-width: 600px; margin: 0 auto; padding: 30px; border: 1px solid #e0e0e0; border-radius: 12px; background: #ffffff; color: #333;">
+          <h2 style="color: #00b894; text-align: center; margin-bottom: 24px;">New Booking Request!</h2>
           
           <p style="font-size: 16px; line-height: 1.6;">A student has requested a seat in your hostel:</p>
 
@@ -49,19 +58,26 @@ const sendBookingNotification = async (ownerEmail, bookingData) => {
 
           <div style="text-align: center; margin: 40px 0;">
             <a href="${bookingLink}" 
-               style="background: linear-gradient(135deg, #00b894, #009b85); color: white; padding: 16px 40px; 
-                      text-decoration: none; border-radius: 50px; font-size: 18px; font-weight: bold; 
-                      display: inline-block; box-shadow: 0 4px 15px rgba(0,184,148,0.3);">
+               style="background: linear-gradient(135deg, #00b894, #009b85); 
+                      color: white; 
+                      padding: 16px 40px; 
+                      text-decoration: none; 
+                      border-radius: 50px; 
+                      font-size: 18px; 
+                      font-weight: bold; 
+                      display: inline-block;
+                      box-shadow: 0 4px 15px rgba(0,184,148,0.3);">
               View & Manage Booking
             </a>
           </div>
 
-          <p style="color: #555; font-size: 14px; text-align: center;">
-            Button not working? Copy this link:<br>
+          <p style="color: #555; font-size: 14px; text-align: center; margin: 20px 0;">
+            Button not working? Copy and paste this link:<br>
             <a href="${bookingLink}" style="color: #00b894; word-break: break-all;">${bookingLink}</a>
           </p>
 
           <hr style="border: none; border-top: 1px solid #eee; margin: 30px 0;">
+
           <p style="font-size: 13px; color: #777; text-align: center;">
             Sent by HostelHub • ${new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}
           </p>
@@ -70,11 +86,13 @@ const sendBookingNotification = async (ownerEmail, bookingData) => {
     };
 
     const info = await transporter.sendMail(mailOptions);
-    console.log('✅ Booking notification sent to owner:', info.messageId);
+    console.log(`✅ EMAIL SENT SUCCESSFULLY → Message ID: ${info.messageId}`);
     return true;
 
   } catch (error) {
-    console.error('❌ Email sending failed:', error.message);
+    console.error('❌ EMAIL SENDING FAILED:', error.message);
+    if (error.code) console.error('Error Code:', error.code);
+    if (error.response) console.error('SMTP Response:', error.response);
     return false;
   }
 };

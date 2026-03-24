@@ -1,6 +1,4 @@
 // controllers/bookingController.js
-// Perfect version - 266+ lines - Fully fixed for email notification + seat update + error handling
-
 const mongoose = require('mongoose');
 const Booking = require('../models/Booking');
 const Hostel = require('../models/Hostel');
@@ -13,7 +11,6 @@ exports.createBooking = async (req, res) => {
 
     const { hostel, roomType, checkInDate } = req.body;
 
-    // Validation
     if (!hostel || !roomType || !checkInDate) {
       return res.status(400).json({
         success: false,
@@ -33,7 +30,7 @@ exports.createBooking = async (req, res) => {
       return res.status(400).json({ success: false, message: 'Check-in date cannot be in the past' });
     }
 
-    // Fetch hostel with owner details
+    // Fetch hostel with owner email
     const hostelDoc = await Hostel.findById(hostel)
       .populate('owner', 'email name')
       .lean();
@@ -45,7 +42,6 @@ exports.createBooking = async (req, res) => {
 
     console.log('[BOOKING CREATE] Hostel found:', hostelDoc.name, 'Owner:', hostelDoc.owner?.name || '(no owner)');
 
-    // Find requested room
     const room = hostelDoc.rooms.find(r => r.type === roomType);
     if (!room) {
       console.log('[BOOKING CREATE] Room type not found. Requested:', roomType);
@@ -65,7 +61,7 @@ exports.createBooking = async (req, res) => {
       });
     }
 
-    // Create booking
+    // Create the booking
     const booking = await Booking.create({
       user: req.user._id,
       hostel,
@@ -77,8 +73,10 @@ exports.createBooking = async (req, res) => {
 
     console.log('[BOOKING CREATE] Created booking ID:', booking._id.toString());
 
-    // Send email notification to owner (non-blocking)
+    // Send email notification (completely non-blocking)
     if (hostelDoc.owner?.email) {
+      console.log(`[EMAIL] Queuing notification to owner: ${hostelDoc.owner.email}`);
+
       sendBookingNotification(hostelDoc.owner.email, {
         bookingId: booking._id.toString(),
         studentName: req.user.name || 'A Student',
@@ -87,8 +85,16 @@ exports.createBooking = async (req, res) => {
         checkInDate: checkIn.toLocaleDateString('en-IN'),
         price: booking.price,
       })
-        .then(() => console.log('[BOOKING CREATE] Email sent successfully to owner'))
-        .catch(emailErr => console.warn('[BOOKING CREATE] Email failed:', emailErr.message));
+        .then((success) => {
+          if (success) {
+            console.log(`[EMAIL] Successfully sent to ${hostelDoc.owner.email}`);
+          } else {
+            console.warn(`[EMAIL] Failed to send to ${hostelDoc.owner.email}`);
+          }
+        })
+        .catch((emailErr) => {
+          console.error(`[EMAIL] Exception while sending to ${hostelDoc.owner.email}:`, emailErr.message);
+        });
     } else {
       console.warn('[BOOKING CREATE] No owner email found for hostel:', hostelDoc._id);
     }
@@ -163,7 +169,6 @@ exports.getOwnerBookings = async (req, res) => {
       return res.status(400).json({ success: false, message: 'Invalid owner ID' });
     }
 
-    // Find all hostels owned by this user
     const ownedHostels = await Hostel.find({ owner: ownerObjectId })
       .select('_id')
       .lean();
@@ -233,7 +238,6 @@ exports.updateBookingStatus = async (req, res) => {
       return res.status(400).json({ success: false, message: 'Room type not found in hostel' });
     }
 
-    // Update seat count only when confirmed
     if (status === 'Confirmed') {
       room.occupied = Number(room.occupied || 0) + 1;
       hostel.availableSeats = Math.max(0, Number(hostel.availableSeats || 0) - 1);
