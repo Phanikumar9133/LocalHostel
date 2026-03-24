@@ -1,10 +1,13 @@
 // utils/sendEmail.js
+// FULL CORRECTED VERSION - Enhanced with longer timeouts for Render free tier + Gmail
+
 const nodemailer = require('nodemailer');
 
 const sendBookingNotification = async (ownerEmail, bookingData) => {
   try {
     console.log(`[EMAIL] Starting to send notification to: ${ownerEmail}`);
 
+    // Create transporter with extended timeouts for Render cold starts
     const transporter = nodemailer.createTransport({
       service: 'gmail',
       secure: true,
@@ -13,11 +16,14 @@ const sendBookingNotification = async (ownerEmail, bookingData) => {
         pass: process.env.EMAIL_PASS.replace(/\s+/g, ''),
       },
       tls: {
-        rejectUnauthorized: false   // Helps with Render/Gmail connection issues
+        rejectUnauthorized: false
       },
-      // Increase timeout to handle cold starts on Render
-      connectionTimeout: 10000,
-      socketTimeout: 15000
+      // Extended timeouts to handle Render free tier cold starts and Gmail delays
+      connectionTimeout: 60000,   // 60 seconds
+      socketTimeout: 90000,       // 90 seconds
+      pool: true,
+      maxConnections: 1,
+      rateDelta: 2000,
     });
 
     const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
