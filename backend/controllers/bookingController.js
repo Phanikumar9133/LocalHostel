@@ -1,5 +1,5 @@
 // controllers/bookingController.js
-// FULL UPDATED VERSION - Using Resend for reliable email notifications
+// FULL READY-TO-USE VERSION WITH RESEND EMAIL NOTIFICATION
 
 const mongoose = require('mongoose');
 const Booking = require('../models/Booking');

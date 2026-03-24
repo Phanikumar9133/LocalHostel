@@ -1,4 +1,6 @@
 // utils/sendEmail.js
+// Simple Resend version using your Gmail as sender
+
 const { Resend } = require('resend');
 
 const resend = new Resend(process.env.RESEND_API_KEY);
