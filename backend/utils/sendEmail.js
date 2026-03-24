@@ -19,8 +19,8 @@ const sendBookingNotification = async (ownerEmail, bookingData) => {
         rejectUnauthorized: false
       },
       // Extended timeouts to handle Render free tier cold starts and Gmail delays
-      connectionTimeout: 60000,   // 60 seconds
-      socketTimeout: 90000,       // 90 seconds
+      connectionTimeout: 180000,   // 60 seconds
+      socketTimeout: 240000,       // 90 seconds
       pool: true,
       maxConnections: 1,
       rateDelta: 2000,
