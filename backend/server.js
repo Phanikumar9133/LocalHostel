@@ -17,7 +17,7 @@ connectDB();
 // ────────────────────────────────────────────────────────────────────────────────
 app.use(cors({
   origin: [
-    'https://local-hostel.vercel.app',      // your deployed frontend
+    'https://localhostel.vercel.app',      // your deployed frontend
     'http://localhost:5173',                // Vite dev
     'http://localhost:3000',                // Create React App / other local
   ],
